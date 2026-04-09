@@ -1,0 +1,1029 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Namitete Secondary | Official Portal</title>
+    <!-- Combined Scripts: Tailwind for logic, FontAwesome for icons -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: { 
+                        brandBlue: "#1e3a5f", 
+                        brandOlive: "#5c7c3b", 
+                        portalCream: "#fefdfb",
+                        brandOrange: "#d97706",
+                        brandGold: "#c9a227",
+                        footerDark: "#0f172a",
+                        accent: "#3b82f6",
+                        surface: "#f8fafc",
+                        headerBg: "#1e3a5f"
+                    },
+                    fontFamily: {
+                        'display': ['Playfair Display', 'serif'],
+                        'body': ['Inter', 'sans-serif']
+                    }
+                }
+            }
+        }
+
+        // Surgical Fix: Admin content points to 'n" repo
+        const GITHUB_CONFIG = { owner: "magawass", repo: "n", path: "data/content.json" };
+        let adminContent = {
+            headerTitle: "WELCOME TO THE OFFICIAL STUDENT PORTAL",
+            headerSub: "EST. 1990 | HARDWORK EARNS PROSPERITY",
+            headerImg: "https://raw.githubusercontent.com/ChikumbutsoLubaini/Teacher-Assistant/main/school_building.jpg",
+            announcements: "",
+            aboutText: "",
+            upcoming: "",
+            adverts: [], 
+            noticeBoard: [], 
+            mediaGallery: [] 
+        };
+
+        // --- Navigation Logic ---
+        function showPage(pageId) {
+            // Clear password and token when leaving admin pages
+            if (pageId !== 'adminPanel' && pageId !== 'adminLogin') {
+                const passEl = document.getElementById('adminPass');
+                if (passEl) passEl.value = '';
+                const tokenEl = document.getElementById('ghTokenInput');
+                if (tokenEl) tokenEl.value = '';
+            }
+            document.getElementById('mainNav').style.display = 'flex';
+            document.getElementById('mainFooter').style.display = 'flex';
+            document.getElementById('portalContainer').classList.remove('active');
+            document.getElementById('welcomeOverlay').classList.remove('active');
+            
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            const target = document.getElementById(pageId);
+            if (target) target.classList.add('active');
+            window.scrollTo(0,0);
+        }
+
+        function openPortal(url) {
+            document.getElementById('mainNav').style.display = 'none';
+            document.getElementById('mainFooter').style.display = 'none';
+            document.getElementById('welcomeOverlay').classList.remove('active');
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.getElementById('portalContainer').classList.add('active');
+            document.querySelector('#portalContainer iframe').src = url;
+        }
+
+        // --- Data Logic (Sync with magawass/n) ---
+        async function loadContent() {
+            try {
+                const rawUrl = `https://raw.githubusercontent.com/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/main/${GITHUB_CONFIG.path}`;
+                const response = await fetch(rawUrl, { cache: 'no-store' });
+                if (response.ok) {
+                    adminContent = await response.json();
+                    updateDisplayContent();
+                    renderAdminLists();
+                    return;
+                }
+            } catch (error) {
+                console.log("Loading local fallback");
+                const local = localStorage.getItem('namiteteAdminContent');
+                if(local) adminContent = JSON.parse(local);
+                updateDisplayContent();
+            }
+        }
+
+        function updateDisplayContent() {
+            document.getElementById('displayHeaderTitle').innerText = adminContent.headerTitle;
+            document.getElementById('displayHeaderSub').innerText = adminContent.headerSub;
+            document.getElementById('heroBanner').style.backgroundImage = `url('${adminContent.headerImg || "https://raw.githubusercontent.com/ChikumbutsoLubaini/Teacher-Assistant/main/school_building.jpg"}')`;
+            
+            document.getElementById('displayAnnouncement').innerText = adminContent.announcements || "No recent announcements.";
+            document.getElementById('displayAboutText').innerText = adminContent.aboutText || "Namitete Secondary School is dedicated to excellence.";
+            document.getElementById('displayUpcoming').innerText = adminContent.upcoming || "No upcoming events scheduled.";
+
+            const renderItems = (items) => (items || []).map(item => `
+                <div class="mb-4 bg-surface rounded-xl p-4 border border-gray-100 hover:shadow-md transition-shadow duration-300">
+                    ${(item.image || item.file) ? `<img src="${item.image || item.file}" class="w-full rounded-lg mb-3 object-cover">` : ''}
+                    <p class="text-sm font-medium text-gray-700">${item.text || item.caption || ''}</p>
+                </div>
+            `).join('');
+
+            document.getElementById('displayAdverts').innerHTML = renderItems(adminContent.adverts);
+            document.getElementById('displayNoticeBoard').innerHTML = renderItems(adminContent.noticeBoard);
+            document.getElementById('galleryDisplay').innerHTML = renderItems(adminContent.mediaGallery);
+        }
+
+        // --- Admin Functions ---
+        async function saveToGithub() {
+            const btn = document.getElementById('saveBtn');
+            const token = document.getElementById('ghTokenInput').value;
+            if(!token) return alert("Enter GitHub Token");
+
+            btn.disabled = true;
+            btn.innerHTML = "SAVING...";
+
+            try {
+                adminContent.headerTitle = document.getElementById('adminHeaderTitle').value;
+                adminContent.headerSub = document.getElementById('adminHeaderSub').value;
+
+                const headerImgFile = document.getElementById('adminHeaderImgFile');
+                if (headerImgFile.files && headerImgFile.files[0]) {
+                    const headerImgData = await new Promise(r => {
+                        const fr = new FileReader();
+                        fr.onload = e => r(e.target.result);
+                        fr.readAsDataURL(headerImgFile.files[0]);
+                    });
+                    adminContent.headerImg = headerImgData;
+                }
+
+                adminContent.announcements = document.getElementById('adminAnnounceInput').value;
+                adminContent.aboutText = document.getElementById('adminAboutInput').value;
+                adminContent.upcoming = document.getElementById('adminUpcomingInput').value;
+
+                const url = `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/${GITHUB_CONFIG.path}`;
+                let sha = "";
+                const checkRes = await fetch(url, { headers: { 'Authorization': `token ${token}` } });
+                if (checkRes.ok) { const d = await checkRes.json(); sha = d.sha; }
+
+                const finalJson = JSON.stringify(adminContent);
+                const base64Content = btoa(unescape(encodeURIComponent(finalJson)));
+
+                const syncRes = await fetch(url, {
+                    method: 'PUT',
+                    headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: "Update Portal Content", content: base64Content, sha: sha })
+                });
+
+                if (syncRes.ok) {
+                    alert("Changes Published Successfully!");
+                    localStorage.setItem('namiteteAdminContent', finalJson);
+                    updateDisplayContent();
+                }
+            } catch (err) {
+                alert("Error saving: " + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = "PUBLISH ALL CHANGES";
+            }
+        }
+
+        async function addItem(type) {
+            const textInput = document.getElementById(`admin${type}Text`);
+            const fileInput = document.getElementById(`admin${type}File`);
+            let imgData = "";
+            
+            if (fileInput.files && fileInput.files[0]) {
+                const reader = new FileReader();
+                imgData = await new Promise(r => {
+                    reader.onload = e => r(e.target.result);
+                    reader.readAsDataURL(fileInput.files[0]);
+                });
+            }
+            
+            const newItem = { text: textInput.value, image: imgData };
+            if(!adminContent[type]) adminContent[type] = [];
+            adminContent[type].push(newItem);
+            renderAdminLists();
+            textInput.value = "";
+        }
+
+        function deleteItem(type, index) {
+            adminContent[type].splice(index, 1);
+            renderAdminLists();
+        }
+
+        function renderAdminLists() {
+            ['adverts', 'noticeBoard', 'mediaGallery'].forEach(type => {
+                const el = document.getElementById(`admin${type}List`);
+                if(el) el.innerHTML = (adminContent[type] || []).map((item, idx) => `
+                    <div class="flex justify-between text-xs p-3 bg-red-50 rounded-lg mb-2 border border-red-100">
+                        <span class="text-gray-700">${item.text || 'Item'}</span>
+                        <button onclick="deleteItem('${type}', ${idx})" class="text-red-500 hover:text-red-700 font-semibold px-2">REMOVE</button>
+                    </div>
+                `).join('');
+            });
+        }
+
+        function previewHeaderImg() {
+            const fileInput = document.getElementById('adminHeaderImgFile');
+            if (fileInput.files && fileInput.files[0]) {
+                const reader = new FileReader();
+                reader.onload = e => {
+                    document.getElementById('adminHeaderImgThumb').src = e.target.result;
+                    document.getElementById('adminHeaderImgPreview').style.display = 'block';
+                    document.getElementById('adminHeaderImgDeleteBtn').style.display = 'inline';
+                };
+                reader.readAsDataURL(fileInput.files[0]);
+            }
+        }
+
+        function deleteHeaderImg() {
+            adminContent.headerImg = '';
+            document.getElementById('adminHeaderImgFile').value = '';
+            document.getElementById('adminHeaderImgPreview').style.display = 'none';
+            document.getElementById('adminHeaderImgDeleteBtn').style.display = 'none';
+            document.getElementById('adminHeaderImgThumb').src = '';
+            updateDisplayContent();
+        }
+
+        function authenticateAdmin() {
+            if (document.getElementById('adminPass').value === '0') {
+                showPage('adminPanel');
+                document.getElementById('adminHeaderTitle').value = adminContent.headerTitle;
+                document.getElementById('adminHeaderSub').value = adminContent.headerSub;
+                document.getElementById('adminAboutInput').value = adminContent.aboutText;
+                document.getElementById('adminAnnounceInput').value = adminContent.announcements;
+                document.getElementById('adminUpcomingInput').value = adminContent.upcoming;
+                if (adminContent.headerImg) {
+                    document.getElementById('adminHeaderImgThumb').src = adminContent.headerImg;
+                    document.getElementById('adminHeaderImgPreview').style.display = 'block';
+                    document.getElementById('adminHeaderImgDeleteBtn').style.display = 'inline';
+                } else {
+                    document.getElementById('adminHeaderImgPreview').style.display = 'none';
+                    document.getElementById('adminHeaderImgDeleteBtn').style.display = 'none';
+                }
+                document.getElementById('adminHeaderImgFile').value = '';
+                renderAdminLists();
+            } else {
+                alert('Access Denied: Incorrect Password');
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', loadContent);
+    </script>
+
+    <style>
+        * { font-family: 'Inter', sans-serif; }
+        
+        .page { display: none; }
+        .page.active { display: block; }
+        
+        .hero-banner {
+            height: 520px;
+            background-size: cover;
+            background-position: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+        }
+        
+        .hero-banner::before {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(135deg, rgba(30, 58, 95, 0.12) 0%, rgba(15, 23, 42, 0.08) 100%);
+        }
+
+        .hero-banner::after {
+            content: "";
+            position: absolute;
+            bottom: 0; left: 0; width: 100%; height: 150px;
+            background: linear-gradient(to top, rgba(248, 250, 252, 1), transparent);
+        }
+        
+        .portal-wrapper {
+            background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
+            padding-bottom: 80px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .main-card {
+            background: linear-gradient(145deg, #ffffff, #f8fafc);
+            width: 92%;
+            max-width: 1200px;
+            margin-top: -100px;
+            padding: 50px;
+            border-radius: 24px;
+            box-shadow: 
+                0 25px 50px -12px rgba(0, 0, 0, 0.15),
+                0 0 0 1px rgba(255, 255, 255, 0.5);
+            z-index: 10;
+            position: relative;
+        }
+
+        .main-card::before {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #1e3a5f, #5c7c3b, #d97706);
+            border-radius: 24px 24px 0 0;
+        }
+
+        .action-btn {
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .action-btn::before {
+            content: "";
+            position: absolute;
+            top: 0; left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .action-btn:hover::before {
+            left: 100%;
+        }
+
+        .action-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.3);
+        }
+
+        .section-title {
+            position: relative;
+            display: inline-block;
+        }
+
+        .section-title::after {
+            content: "";
+            position: absolute;
+            bottom: -8px;
+            left: 0;
+            width: 40px;
+            height: 3px;
+            background: linear-gradient(90deg, #1e3a5f, #3b82f6);
+            border-radius: 2px;
+        }
+
+        .info-card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            border: 1px solid #e2e8f0;
+            transition: all 0.3s ease;
+        }
+
+        .info-card:hover {
+            box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.1);
+            border-color: #cbd5e1;
+        }
+
+        iframe { width: 100%; height: calc(100vh - 60px); border: none; }
+        
+        #portalContainer.active { 
+            display: block; 
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100vh; 
+            background: white; 
+            z-index: 1000; 
+        }
+        
+        .admin-input { 
+            border: 2px solid #e2e8f0; 
+            padding: 12px 16px; 
+            border-radius: 10px; 
+            width: 100%; 
+            margin-bottom: 12px; 
+            font-size: 14px;
+            transition: all 0.2s ease;
+            background: #fafafa;
+        }
+
+        .admin-input:focus {
+            outline: none;
+            border-color: #3b82f6;
+            background: white;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .nav-link {
+            position: relative;
+            padding: 8px 0;
+        }
+
+        .nav-link::after {
+            content: "";
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background: #ffffff;
+            transition: width 0.3s ease;
+        }
+
+        .nav-link:hover::after {
+            width: 100%;
+        }
+
+        .decorative-pattern {
+            background-image: radial-gradient(circle at 1px 1px, rgba(30, 58, 95, 0.05) 1px, transparent 0);
+            background-size: 40px 40px;
+        }
+
+        /* Welcome Modal Styles */
+        .welcome-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100vh;
+            background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%);
+            z-index: 999;
+            display: none;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .welcome-overlay.active {
+            display: flex;
+        }
+
+        .welcome-content {
+            text-align: center;
+            color: white;
+            max-width: 600px;
+            padding: 40px;
+        }
+
+        .welcome-content h2 {
+            font-family: 'Playfair Display', serif;
+            font-size: 3rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+
+        .welcome-content p {
+            font-size: 1.1rem;
+            opacity: 0.8;
+            margin-bottom: 2rem;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .animate-fade-in {
+            animation: fadeInUp 0.6s ease forwards;
+        }
+
+        /* Help Modal Content Styles */
+        #helpModal .prose h3 {
+            font-size: 0.95rem;
+            margin-bottom: 0.5rem;
+        }
+
+        #helpModal .prose p,
+        #helpModal .prose li {
+            font-size: 0.8rem;
+            line-height: 1.5;
+        }
+
+        #helpModal .prose ul {
+            margin-bottom: 0.75rem;
+        }
+
+        #helpModal .prose li {
+            margin-bottom: 0.25rem;
+        }
+
+        /* Mobile Responsive Fixes */
+        @media (max-width: 768px) {
+            /* Fix Get Started button overlap */
+            .hero-banner {
+                height: auto;
+                min-height: 480px;
+                padding-bottom: 120px;
+            }
+
+            .hero-banner .relative.z-10 {
+                padding-bottom: 20px;
+            }
+
+            .main-card {
+                margin-top: -60px;
+                padding: 24px 16px;
+                width: 96%;
+                border-radius: 20px;
+            }
+
+            /* Fix cards spacing on mobile */
+            .info-card {
+                padding: 20px 16px;
+                margin-bottom: 16px;
+            }
+
+            .info-card h3 {
+                font-size: 0.8rem;
+                margin-bottom: 12px;
+            }
+
+            .info-card p {
+                font-size: 0.875rem;
+                line-height: 1.6;
+            }
+
+            .space-y-8 > * + * {
+                margin-top: 1rem;
+            }
+
+            /* Footer bottom bar center alignment */
+            footer .border-t {
+                flex-direction: column;
+                text-align: center;
+                gap: 12px;
+            }
+
+            footer .border-t p,
+            footer .border-t button {
+                text-align: center;
+                justify-content: center;
+            }
+
+            /* Fix contact section alignment on mobile */
+            footer .text-right {
+                text-align: center;
+                margin-top: 24px;
+            }
+
+            footer .text-right .flex {
+                justify-content: center;
+            }
+        }
+    </style>
+<script src="https://sites.super.myninja.ai/_assets/ninja-daytona-script.js"></script>
+</head>
+<body class="bg-surface decorative-pattern">
+
+    <!-- Header Navigation - Now with brandBlue background -->
+    <header id="mainNav" class="bg-headerBg px-[5%] py-4 flex justify-between items-center sticky top-0 z-50 shadow-lg">
+        <div class="flex flex-col">
+            <h1 class="text-2xl font-display font-bold tracking-tight leading-none text-white">NAMITETE</h1>
+            <p class="text-[10px] font-semibold text-white/70 tracking-[0.2em] uppercase">Secondary School</p>
+        </div>
+        <nav class="hidden md:flex items-center space-x-8 text-sm font-semibold uppercase tracking-wide">
+            <button onclick="showPage('homePage')" class="nav-link text-white/90 hover:text-white transition-colors">Home</button>
+            <button onclick="showWelcome()" class="nav-link text-white/90 hover:text-white transition-colors">Student Portal</button>
+            <button onclick="showPage('adminLogin')" class="bg-white text-brandBlue px-6 py-2.5 rounded-full hover:bg-gray-100 transition-all hover:shadow-lg">Admin Login</button>
+        </nav>
+        <!-- Mobile Menu Button -->
+        <button class="md:hidden text-white p-2">
+            <i class="fas fa-bars text-xl"></i>
+        </button>
+    </header>
+
+    <main>
+        <!-- Home Page -->
+        <div id="homePage" class="page active">
+            <!-- Hero Section -->
+            <div class="hero-banner" id="heroBanner">
+                <div class="relative z-10 text-white text-center mt-24 px-6 max-w-4xl">
+                    <div class="inline-block mb-6 px-4 py-1.5 bg-white/10 backdrop-blur-sm rounded-full border border-white/20">
+                        <span class="text-xs font-medium tracking-widest uppercase text-white/90">Established 1990</span>
+                    </div>
+                    <h2 id="displayHeaderTitle" class="font-display text-4xl md:text-6xl font-bold drop-shadow-lg leading-tight">
+                        WELCOME TO THE OFFICIAL STUDENT PORTAL
+                    </h2>
+                    <p id="displayHeaderSub" class="mt-4 text-base md:text-lg font-medium text-white/80 tracking-wide">
+                        EST. 1990 | HARDWORK EARNS PROSPERITY
+                    </p>
+                    <div class="mt-8 flex justify-center gap-4">
+                        <button onclick="showWelcome()" class="bg-white text-brandBlue px-8 py-3 rounded-full font-semibold hover:bg-gray-100 transition-all hover:shadow-xl">
+                            <i class="fas fa-arrow-right mr-2"></i> Get Started/Yambani
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Overlapping Main Card -->
+            <div class="portal-wrapper">
+                <div class="main-card">
+                    <!-- Information Grid -->
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <!-- Column 1: About & Announcements -->
+                        <div class="space-y-8">
+                            <div class="info-card">
+                                <h3 class="section-title text-sm font-bold uppercase tracking-widest text-brandBlue mb-6">About Our School</h3>
+                                <p id="displayAboutText" class="text-gray-600 leading-relaxed text-sm"></p>
+                            </div>
+                            
+                            <div class="info-card bg-gradient-to-br from-blue-50 to-white border-blue-100">
+                                <div class="flex items-center gap-3 mb-4">
+                                    <div class="w-10 h-10 bg-brandBlue/10 rounded-lg flex items-center justify-center">
+                                        <i class="fas fa-bullhorn text-brandBlue"></i>
+                                    </div>
+                                    <h3 class="text-sm font-bold uppercase tracking-widest text-brandBlue">Latest Announcements</h3>
+                                </div>
+                                <p id="displayAnnouncement" class="text-gray-600 text-sm italic"></p>
+                            </div>
+                        </div>
+
+                        <!-- Column 2: Notice Board & Events -->
+                        <div class="space-y-8">
+                            <div class="info-card">
+                                <div class="flex items-center gap-3 mb-6">
+                                    <div class="w-10 h-10 bg-brandOlive/10 rounded-lg flex items-center justify-center">
+                                        <i class="fas fa-thumbtack text-brandOlive"></i>
+                                    </div>
+                                    <h3 class="section-title text-sm font-bold uppercase tracking-widest text-brandOlive">Notice Board</h3>
+                                </div>
+                                <div id="displayNoticeBoard" class="space-y-4"></div>
+                            </div>
+                            
+                            <div class="info-card bg-gradient-to-br from-amber-50 to-white border-amber-100">
+                                <div class="flex items-center gap-3 mb-4">
+                                    <div class="w-10 h-10 bg-brandOrange/10 rounded-lg flex items-center justify-center">
+                                        <i class="fas fa-calendar-alt text-brandOrange"></i>
+                                    </div>
+                                    <h3 class="text-sm font-bold uppercase tracking-widest text-brandOrange">Upcoming Events</h3>
+                                </div>
+                                <p id="displayUpcoming" class="text-gray-700 text-sm font-medium"></p>
+                            </div>
+                        </div>
+
+                        <!-- Column 3: Gallery & Adverts -->
+                        <div class="space-y-8">
+                            <div class="info-card">
+                                <div class="flex items-center gap-3 mb-6">
+                                    <div class="w-10 h-10 bg-accent/10 rounded-lg flex items-center justify-center">
+                                        <i class="fas fa-images text-accent"></i>
+                                    </div>
+                                    <h3 class="section-title text-sm font-bold uppercase tracking-widest text-accent">Media Gallery</h3>
+                                </div>
+                                <div id="galleryDisplay" class="grid grid-cols-1 gap-4"></div>
+                            </div>
+                            
+                            <div class="info-card bg-gradient-to-br from-purple-50 to-white border-purple-100">
+                                <div class="flex items-center gap-3 mb-4">
+                                    <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                                        <i class="fas fa-ad text-purple-600"></i>
+                                    </div>
+                                    <h3 class="text-sm font-bold uppercase tracking-widest text-purple-600">Adverts</h3>
+                                </div>
+                                <div id="displayAdverts"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Admin Login (Password: 0) - Centered Modal Style -->
+        <div id="adminLogin" class="page">
+            <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 px-6 py-12">
+                <div class="max-w-md w-full">
+                    <div class="bg-white p-10 rounded-3xl shadow-2xl border border-gray-100 text-center relative overflow-hidden">
+                        <div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-brandBlue via-brandOlive to-brandOrange"></div>
+                        <div class="w-20 h-20 bg-brandBlue/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                            <i class="fas fa-user-shield text-3xl text-brandBlue"></i>
+                        </div>
+                        <h2 class="text-2xl font-display font-bold mb-2 text-brandBlue">Admin Access</h2>
+                        <p class="text-gray-500 text-sm mb-8">Enter your credentials to continue</p>
+                        <input type="password" id="adminPass" placeholder="Enter Password" class="admin-input text-center text-lg tracking-widest">
+                        <button onclick="authenticateAdmin()" class="w-full bg-brandBlue text-white py-4 rounded-xl font-bold hover:bg-brandBlue/90 transition-all mt-4 shadow-lg shadow-brandBlue/20 hover:shadow-xl hover:shadow-brandBlue/30">
+                            <i class="fas fa-lock-open mr-2"></i> LOG IN
+                        </button>
+                        <button onclick="showPage('homePage')" class="mt-4 text-gray-400 text-sm hover:text-gray-600 transition-colors">
+                            <i class="fas fa-arrow-left mr-1"></i> Back to Home
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Admin Panel (Syncs with enitac/n) -->
+        <div id="adminPanel" class="page py-10 px-6 min-h-screen bg-surface">
+            <div class="max-w-6xl mx-auto">
+                <div class="flex justify-between items-center mb-10">
+                    <div>
+                        <h2 class="text-3xl font-display font-bold text-brandBlue">Content Editor</h2>
+                        <p class="text-gray-500 text-sm mt-1">Synced with n Repository</p>
+                    </div>
+                    <button onclick="showPage('homePage')" class="flex items-center gap-2 text-gray-500 font-semibold hover:text-brandBlue transition-colors">
+                        <i class="fas fa-arrow-left"></i> Back to Site
+                    </button>
+                </div>
+
+                <div class="bg-white p-8 rounded-2xl shadow-lg border border-gray-100 mb-8 relative overflow-hidden">
+                    <div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-green-400 to-emerald-500"></div>
+                    <div class="flex flex-col md:flex-row gap-4 items-end">
+                        <div class="flex-1">
+                            <label class="text-xs font-bold text-red-600 block mb-2 uppercase tracking-wider">
+                                <i class="fas fa-key mr-1"></i> Enter Code
+                            </label>
+                            <input type="password" id="ghTokenInput" placeholder="Paste your code here" class="admin-input mb-0">
+                        </div>
+                        <button id="saveBtn" onclick="saveToGithub()" class="w-full md:w-auto bg-gradient-to-r from-green-500 to-emerald-600 text-white px-8 py-4 rounded-xl font-bold text-lg hover:shadow-lg hover:shadow-green-500/25 transition-all">
+                            <i class="fas fa-cloud-upload-alt mr-2"></i> PUBLISH ALL CHANGES
+                        </button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div class="bg-white p-8 rounded-2xl border border-gray-100 shadow-sm">
+                        <h3 class="font-bold mb-6 pb-3 border-b border-gray-100 text-sm uppercase tracking-widest text-gray-700 flex items-center gap-2">
+                            <i class="fas fa-edit text-brandBlue"></i> General Content
+                        </h3>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="text-xs font-bold block mb-2 uppercase tracking-wider text-gray-600">Hero Title</label>
+                                <input type="text" id="adminHeaderTitle" class="admin-input">
+                            </div>
+                            <div>
+                                <label class="text-xs font-bold block mb-2 uppercase tracking-wider text-gray-600">Hero Subtitle</label>
+                                <input type="text" id="adminHeaderSub" class="admin-input">
+                            </div>
+                            <div>
+                                <label class="text-xs font-bold block mb-2 uppercase tracking-wider text-gray-600">Hero Background Image</label>
+                                <div id="adminHeaderImgPreview" class="mb-3 rounded-xl overflow-hidden border border-gray-200" style="display:none; max-height:200px;"><img id="adminHeaderImgThumb" src="" class="w-full object-cover" style="max-height:200px;"></div>
+                                <input type="file" id="adminHeaderImgFile" accept="image/*" class="text-xs mb-2 block text-gray-500" onchange="previewHeaderImg()">
+                                <button type="button" id="adminHeaderImgDeleteBtn" onclick="deleteHeaderImg()" class="text-xs text-red-500 hover:text-red-700 font-semibold" style="display:none;"><i class="fas fa-trash-alt mr-1"></i> Remove Background Image</button>
+                            </div>
+                            <div>
+                                <label class="text-xs font-bold block mb-2 uppercase tracking-wider text-gray-600">About Us Text</label>
+                                <textarea id="adminAboutInput" class="admin-input h-32 resize-none"></textarea>
+                            </div>
+                            <div>
+                                <label class="text-xs font-bold block mb-2 uppercase tracking-wider text-gray-600">Announcements</label>
+                                <textarea id="adminAnnounceInput" class="admin-input h-24 resize-none"></textarea>
+                            </div>
+                            <div>
+                                <label class="text-xs font-bold block mb-2 uppercase tracking-wider text-gray-600">Upcoming Events</label>
+                                <textarea id="adminUpcomingInput" class="admin-input h-24 resize-none"></textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="space-y-6">
+                        <div class="bg-white p-8 rounded-2xl border border-gray-100 shadow-sm">
+                            <h3 class="font-bold mb-6 pb-3 border-b border-gray-100 text-sm uppercase tracking-widest text-gray-700 flex items-center gap-2">
+                                <i class="fas fa-thumbtack text-brandOlive"></i> Notice Board / Gallery
+                            </h3>
+                            <div class="space-y-6">
+                                <div class="bg-surface p-4 rounded-xl">
+                                    <label class="text-xs font-bold block mb-2 uppercase tracking-wider text-gray-600">Add Notice</label>
+                                    <input type="text" id="adminnoticeBoardText" placeholder="Notice Headline" class="admin-input">
+                                    <input type="file" id="adminnoticeBoardFile" class="text-xs mb-3 block text-gray-500">
+                                    <button onclick="addItem('noticeBoard')" class="bg-brandBlue text-white px-5 py-2 text-sm rounded-lg font-semibold hover:bg-brandBlue/90 transition-colors">
+                                        <i class="fas fa-plus mr-1"></i> Add Notice
+                                    </button>
+                                    <div id="adminnoticeBoardList" class="mt-4 max-h-40 overflow-y-auto"></div>
+                                </div>
+                                
+                                <div class="bg-surface p-4 rounded-xl">
+                                    <label class="text-xs font-bold block mb-2 uppercase tracking-wider text-gray-600">Add to Gallery</label>
+                                    <input type="text" id="adminmediaGalleryText" placeholder="Gallery Caption" class="admin-input">
+                                    <input type="file" id="adminmediaGalleryFile" class="text-xs mb-3 block text-gray-500">
+                                    <button onclick="addItem('mediaGallery')" class="bg-brandOlive text-white px-5 py-2 text-sm rounded-lg font-semibold hover:bg-brandOlive/90 transition-colors">
+                                        <i class="fas fa-plus mr-1"></i> Add to Gallery
+                                    </button>
+                                    <div id="adminmediaGalleryList" class="mt-4 max-h-40 overflow-y-auto"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Welcome Overlay (Blue Background with Exam Buttons) -->
+    <div id="welcomeOverlay" class="welcome-overlay">
+        <div class="welcome-content">
+            <div class="w-24 h-24 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-8">
+                <i class="fas fa-graduation-cap text-5xl text-white"></i>
+            </div>
+            <h2>Welcome to Namitete</h2>
+            <p>Your journey to academic excellence begins here. Select an exam portal to continue.</p>
+            <div class="flex flex-col sm:flex-row gap-4 justify-center mt-8">
+                <button onclick="openPortal('https://enitac.github.io/en/DAY.html')" class="action-btn bg-brandBlue text-white px-5 py-3 rounded-xl font-semibold hover:bg-brandBlue/90 transition-all shadow-lg shadow-brandBlue/20 flex items-center justify-center gap-2">
+                    <div class="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-calendar-check"></i>
+                    </div>
+                    EXAMS DAY
+                </button>
+                <button onclick="openPortal('https://enitac.github.io/en1/ODL.html')" class="action-btn bg-brandOlive text-white px-5 py-3 rounded-xl font-semibold hover:bg-brandOlive/90 transition-all shadow-lg shadow-brandOlive/20 flex items-center justify-center gap-2">
+                    <div class="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-desktop"></i>
+                    </div>
+                    EXAMS ODL
+                </button>
+            </div>
+            <button onclick="closeWelcome()" class="mt-6 text-white/60 hover:text-white transition-colors text-sm">
+                <i class="fas fa-arrow-left mr-1"></i> Back to Home
+            </button>
+        </div>
+    </div>
+
+    <!-- Portal Container (Iframe Overlay) -->
+    <div id="portalContainer" class="hidden">
+        <div class="bg-brandBlue p-4 flex justify-between items-center text-white shadow-lg">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-school"></i>
+                </div>
+                <span class="font-bold text-sm uppercase tracking-widest">NAMITETE OFFICIAL PORTAL</span>
+            </div>
+            <button onclick="showPage('homePage')" class="bg-red-500 hover:bg-red-600 px-5 py-2 rounded-lg font-bold text-sm transition-colors flex items-center gap-2">
+                <i class="fas fa-times"></i> EXIT PORTAL
+            </button>
+        </div>
+        <iframe src=""></iframe>
+    </div>
+
+    <!-- Footer -->
+    <footer id="mainFooter" class="bg-footerDark text-gray-400 py-8 px-[5%]">
+        <div class="w-full">
+            <div class="flex flex-col md:flex-row justify-between items-start w-full">
+                <div class="shrink-0">
+                    <h3 class="text-2xl font-display font-bold text-white mb-3">Namitete Secondary School</h3>
+                    <p class="text-gray-500 text-sm">Hardwork earns prosperity 1990</p>
+                    <div class="flex gap-4 mt-6">
+                        <a href="#" class="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center hover:bg-white/20 transition-colors">
+                            <i class="fab fa-facebook-f text-white"></i>
+                        </a>
+                        <a href="#" class="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center hover:bg-white/20 transition-colors">
+                            <i class="fab fa-twitter text-white"></i>
+                        </a>
+                        <a href="#" class="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center hover:bg-white/20 transition-colors">
+                            <i class="fab fa-instagram text-white"></i>
+                        </a>
+                    </div>
+                </div>
+                <div class="text-right shrink-0">
+                    <p class="text-white font-semibold uppercase tracking-widest text-sm mb-4">Contact Office</p>
+                    <div class="space-y-2 text-sm">
+                        <p class="flex items-center justify-end gap-2">
+                            <span><span class="text-brandOrange font-semibold">📞 +265 999 19 59 15</span>
+                        </p>
+                        <p class="flex items-center justify-end gap-2">
+                            <span>✉️ namitetesecoschool@gmail.com</span>
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <div class="border-t border-gray-800 mt-6 pt-6 flex flex-col md:flex-row justify-between items-center w-full text-center md:text-left">
+                <p class="text-gray-500 text-sm shrink-0 w-full md:w-auto">© 2026 All Rights Reserved.</p>
+                <button onclick="showHelpModal()" class="text-brandOrange font-semibold hover:text-brandOrange/80 transition-colors text-sm flex items-center gap-2 justify-center md:justify-start">
+                    <i class="fas fa-question-circle"></i> Help
+                </button>
+                <p class="text-sm shrink-0 w-full md:w-auto">Designed by <span class="text-brandOrange font-semibold">CHIKUMBUTSO LUBAINI-0994 03 93 25</span></p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Help Modal -->
+    <div id="helpModal" class="fixed inset-0 bg-black/70 z-[1000] hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden shadow-2xl">
+            <div class="bg-brandBlue p-6 flex justify-between items-center">
+                <h2 class="text-2xl font-display font-bold text-white">📚 Portal User Manual</h2>
+                <button onclick="closeHelpModal()" class="text-white/80 hover:text-white transition-colors">
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
+                <div class="prose prose-sm max-w-none text-gray-700">
+                    <h3 class="text-lg font-bold text-brandBlue mb-3">1. Namitete Secondary Portal (Front Page)</h3>
+                    <p class="mb-4">The front page is designed for students, parents, guardians and sponsors to access exam results quickly.</p>
+                    <p class="mb-2"><strong>How to View Results:</strong></p>
+                    <ul class="list-disc pl-5 mb-4 space-y-1">
+                        <li><strong>On the home page</strong></li>
+                        <li><strong>Click on:</strong> Get Started button.</li>
+                        <li><strong>Choose portal:-</strong>Exam Day or Exam ODL.</li>
+                        <li><strong>Open portal of your choice:</strong> by clicking buttons Exam Day or Exam ODL.</li>
+                        <li><strong>Select Form:</strong> Choose the student's class (Form 1–4).</li>
+                        <li><strong>Enter Exam Number:</strong> Enter the unique ID (e.g., J047 or 004)</li>
+                        <li><strong>Enter Password:</strong> (Default is — unless disabled by Admin).</li>
+                        <li><strong>View Results:</strong> Click "View Results" for the official Progress Report or the secondary button for Brief Results.</li>
+                    </ul>
+                    <p class="mb-2"><strong>Features of the Progress Report:</strong></p>
+                    <ul class="list-disc pl-5 mb-4 space-y-1">
+                        <li><strong>A4 Optimized:</strong> Designed to fit perfectly on one page when printed.</li>
+                        <li><strong>Automated Comments:</strong> The system generates teacher and head teacher remarks based on the student's average.</li>
+                        <li><strong>Sharing:</strong> Use the 📱 WhatsApp button to send a PDF directly to a parent's phone, or click Save (PDF) to keep a digital copy.</li>
+                    </ul>
+
+                    <h3 class="text-lg font-bold text-brandBlue mb-3 mt-6">2. Administrator Login</h3>
+                    <p class="mb-4">To access the backend, staff must follow these steps:</p>
+                    <ul class="list-disc pl-5 mb-4 space-y-1">
+                        <li>On the main page, click LOGIN.</li>
+                        <li><strong>System Password:</strong> Enter _ _ _ _.</li>
+                        <li><strong>Code:</strong> Enter your Code. (This is required to save any changes. Without this, you can only view data, not save it).</li>
+                    </ul>
+
+                    <h3 class="text-lg font-bold text-brandBlue mb-3 mt-6">3. Data Entry (For Teachers)</h3>
+                    <p class="mb-4">This section is used to record student scores for specific subjects.</p>
+                    <ul class="list-disc pl-5 mb-4 space-y-1">
+                        <li>Navigate to Admin Dashboard > Data Entry.</li>
+                        <li><strong>Select Class and Subject:</strong> Once both are selected, the student list will load automatically.</li>
+                        <li><strong>Enter Scores:</strong> Type the numeric score in the box next to the student's name.</li>
+                        <li>The system uses <strong>Live Update:</strong> Scores are updated in the marksheet immediately as you type.</li>
+                        <li><strong>Special Indicators:</strong> This applies to forms 3 and 4 - Enter N for No Mark, Enter X for Not Enrolled.</li>
+                        <li><strong>SAVE DATA:</strong> Crucial! After entering marks, you must click Save All Data to permanently store the scores on the server.</li>
+                        <li><strong>Real-Time Monitor:</strong> In the Admin Home, use the Subject Score Entry Monitor to see which subjects have been completed and which are still missing scores.</li>
+                    </ul>
+
+                    <h3 class="text-lg font-bold text-brandBlue mb-3 mt-6">4. File Uploads & Configuration</h3>
+                    <p class="mb-4">This area is for the Exam Coordinator or Headteacher.</p>
+                    <p class="mb-2"><strong>A. Managing Student Lists (CSV)</strong></p>
+                    <ul class="list-disc pl-5 mb-4 space-y-1">
+                        <li><strong>Upload CSV:</strong> Select a class and upload a .csv file.</li>
+                        <li><strong>Format:</strong> The file must have headers: STUDENT'S NAME, Exam Number,SEX,SNE.</li>
+                        <li><strong>Manual Entry:</strong> If a single student is missing, use the Manual Student Entry section at the bottom of the Uploads page to add them without re-uploading the whole list.</li>
+                    </ul>
+                    <p class="mb-2"><strong>B. Report Settings</strong></p>
+                    <ul class="list-disc pl-5 mb-4 space-y-1">
+                        <li>Update the Term, Academic Year, Next Term Opening Date, and School Fees. These details will appear automatically on every student's report.</li>
+                    </ul>
+                    <p class="mb-2"><strong>C. Teacher Assignment</strong></p>
+                    <ul class="list-disc pl-5 mb-4 space-y-1">
+                        <li>Select a class and enter the names of the teachers for each subject. This ensures the correct teacher's name appears next to the subject grade on the Progress Report.</li>
+                    </ul>
+                    <p class="mb-2"><strong>D. Grade Boundary Editor</strong></p>
+                    <ul class="list-disc pl-5 mb-4 space-y-1">
+                        <li><strong>Forms 1 & 2:</strong> Edit the minimum scores for grades A, B, C, D, and F.</li>
+                        <li><strong>Forms 3 & 4:</strong> Edit the minimum scores for the 1–9 point system.</li>
+                        <li><strong>Note:</strong> Changing these values will instantly update all student grades and the pass/fail analysis.</li>
+                    </ul>
+
+                    <h3 class="text-lg font-bold text-brandBlue mb-3 mt-6">5. Sheets & Analysis (Reporting)</h3>
+                    <p class="mb-4">Access this via Admin Dashboard > Progress, Grade, Analysis Sheets.</p>
+                    <ul class="list-disc pl-5 mb-4 space-y-1">
+                        <li><strong>Mark Sheet:</strong> Displays raw scores for all students in a grid.</li>
+                        <li><strong>Grade Sheet:</strong> Displays the converted letter/number grades and calculates Class Position and Rank.</li>
+                        <li>All these sheet have an option of Saving files as Excel or Pdf, the sheets can be printed as final sheets for display on the notice board.</li>
+                        <li><strong>Analysis Report:</strong> Provides a subject-by-subject breakdown (number of A's, B's, etc.) and the Pass/Fail percentage for the entire class.</li>
+                        <li><strong>Batch PDF Generator:</strong> Click Progress Report Generator (Batch PDF). This powerful tool will automatically generate and download individual PDF reports for every student in the selected class simultaneously.</li>
+                    </ul>
+
+                    <h3 class="text-lg font-bold text-brandBlue mb-3 mt-6">6. Access Control (Security)</h3>
+                    <p class="mb-4">In the Uploads page, the administrator can:</p>
+                    <ul class="list-disc pl-5 mb-4 space-y-1">
+                        <li><strong>Lock/Unlock Subjects:</strong> to prevent teachers from changing scores after a deadline.</li>
+                        <li><strong>Portal Access Control:</strong> Toggle the password requirement on or off.</li>
+                        <li><strong>Recommendation:</strong> Disable access (set to Disabled) until all marks are verified to prevent students from seeing incomplete results.</li>
+                    </ul>
+
+                    <h3 class="text-lg font-bold text-brandBlue mb-3 mt-6">⚙️ Technical Troubleshooting</h3>
+                    <ul class="list-disc pl-5 mb-4 space-y-1">
+                        <li><strong>Data not saving?</strong> Ensure your "Code" is entered correctly in the Admin Home.</li>
+                        <li><strong>Table looks messy on mobile?</strong> The portal is "Surgical Fixed" for mobile. Tables are scrollable horizontally. For the best experience, use "Landscape" mode on your phone.</li>
+                        <li><strong>Printing issues?</strong> When printing sheets (Mark Sheet/Grade Sheet), the system automatically formats them in Landscape. When printing Progress Reports, it formats them in Portrait. Don't change these settings manually in the print dialog.</li>
+                    </ul>
+
+                    <p class="text-center text-gray-500 text-sm mt-6 pt-4 border-t border-gray-200">© 2026. All rights reserved. Designed by CHIKUMBUTSO LUBAINI-0 994 039 325 for Namitete Secondary School.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Welcome Modal Functions
+        function showWelcome() {
+            document.getElementById('welcomeOverlay').classList.add('active');
+        }
+
+        function closeWelcome() {
+            document.getElementById('welcomeOverlay').classList.remove('active');
+        }
+
+        // Help Modal Functions
+        function showHelpModal() {
+            const modal = document.getElementById('helpModal');
+            modal.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeHelpModal() {
+            const modal = document.getElementById('helpModal');
+            modal.style.display = 'none';
+            document.body.style.overflow = '';
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('helpModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeHelpModal();
+            }
+        });
+
+        // Close modal with Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeHelpModal();
+            }
+        });
+    </script>
+
+</body>
+</html>
