@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -116,7 +116,11 @@ function saveScoresAsExcel() {
         return;
     }
     
-    exportToExcel('dataEntryTable', `Scores_${form}_${subject}`);
+    const formDisplay = form.toUpperCase().replace('FORM', 'Form ');
+    const term = currentConfig ? currentConfig.term : '';
+    const year = currentConfig ? (currentConfig.year || '2025') : '2025';
+    const filename = `Namitete_Secondary_${formDisplay}_${subject}_Term${term}_${year}`;
+    exportToExcel('dataEntryTable', filename);
 }
 
 function saveSelectedSubjectsToRepo() {
@@ -946,7 +950,7 @@ src="https://raw.githubusercontent.com/enitac/n/main/logo.png" class="logo" alt=
     </select>
 
     <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
-        <button onclick="exportToExcel('scoresTable', 'ScoreSheet')" class="small-btn" style="background: #28a745; margin: 5px;">Export to Excel</button>
+        <button onclick="exportMarkSheetWithFilename()" class="small-btn" style="background: #28a745; margin: 5px;">Export to Excel</button>
         <button onclick="printSheet('scoreSheetView')" class="small-btn" style="max-width: 150px; margin: 5px;">Print Sheet</button>
     </div>
 
@@ -1143,6 +1147,9 @@ src="https://raw.githubusercontent.com/enitac/n/main/logo.png" class="logo" alt=
 <button onclick="archiveExamData()" style="background: #8e44ad;">Exam Archived</button>
 <p id="archiveStatus" style="font-size:11px;color:#8e44ad;"></p>
 
+<button onclick="clearArchiveData()" style="background: #e74c3c; margin-top: 10px;">Clear Archive Data</button>
+<p id="archiveClearStatus" style="font-size:11px;color:#e74c3c;"></p>
+
 <hr style="margin: 20px 0; border: 1px solid #ccc;">
 <h3>SEARCH ARCHIVED RESULTS</h3>
 <p style="font-size:0.9em; color:#7f8c8d; margin-bottom:10px;">Filter by any combination below, then click Search.</p>
@@ -1289,15 +1296,15 @@ const SUBJECT_MAP = {
     "Bible Knowledge": "BK",
     "Biology": "Bio",
     "Chemistry": "Chem",
-    "Chichewa": "Chich",
+    "Chichewa": "Chic",
     "Computer Studies": "Comp",
     "English": "Eng",
     "French": "Fr",
     "Geography": "Geo",
     "History": "Hist",
-    "Home Economics": "H/Econ",
-    "Mathematics": "Maths",
-    "Physics": "Phys",
+    "Home Economics": "HEc",
+    "Mathematics": "Mat",
+    "Physics": "Phy",
     "Social/Life": "S/Life"
 };
 const ALL_SUBJECTS = Object.keys(SUBJECT_MAP); // Full names used for internal logic
@@ -1785,21 +1792,31 @@ function printSheet(pageId) {
     const styleOverride = document.createElement('style');
     styleOverride.id = 'landscapePrintStyle';
     styleOverride.innerHTML = `
-        @page { size: A4 landscape !important; margin: 0.5cm !important; }
+        @page { size: A4 landscape !important; margin: 5mm !important; }
+        html, body {
+            width: 100% !important;
+            height: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: white !important;
+            overflow: visible !important;
+        }
         body * { visibility: hidden !important; }
         body { visibility: visible !important; }
         #${pageId} {
             visibility: visible !important;
             display: block !important;
-            padding: 15px !important;
+            padding: 8px 10px !important;
             margin: 0 auto !important;
             position: absolute !important;
-            left: 50% !important;
-            transform: translateX(-50%) !important;
-            top: 0;
+            left: 0 !important;
+            right: 0 !important;
+            top: 0 !important;
+            transform: none !important;
             width: 100% !important;
             max-width: none !important;
             box-shadow: none !important;
+            overflow: visible !important;
         }
         #${pageId} *,
         #${pageId} .table-wrapper,
@@ -1811,14 +1828,41 @@ function printSheet(pageId) {
         #${pageId} th {
             visibility: visible !important;
         }
-        #${pageId} button, #${pageId} select, #${pageId} label, #${pageId} input {
+        #${pageId} button, #${pageId} select, #${pageId} label, #${pageId} input, #${pageId} .back-btn {
             display: none !important;
         }
-        @media (min-width: 768px) {
-            #gradesTable, #analysisTable, #scoresTable {
-                width: 100% !important;
-                min-width: 100% !important;
-            }
+        #${pageId} .table-wrapper {
+            overflow: visible !important;
+            width: 100% !important;
+        }
+        #${pageId} table {
+            width: 100% !important;
+            table-layout: fixed !important;
+            border-collapse: collapse !important;
+            page-break-inside: auto !important;
+        }
+        #${pageId} thead { display: table-header-group !important; }
+        #${pageId} tr { page-break-inside: avoid !important; page-break-after: auto !important; }
+        #${pageId} td, #${pageId} th {
+            padding: 2px 3px !important;
+            font-size: 7pt !important;
+            white-space: normal !important;
+            word-wrap: break-word !important;
+            overflow-wrap: break-word !important;
+            border: 1px solid black !important;
+            text-align: center !important;
+        }
+        #${pageId} td:first-child, #${pageId} th:first-child,
+        #${pageId} td:nth-child(2), #${pageId} th:nth-child(2),
+        #${pageId} td:nth-child(3), #${pageId} th:nth-child(3) {
+            text-align: left !important;
+        }
+        #${pageId} h2 {
+            font-size: 11pt !important;
+            margin: 0 0 5px 0 !important;
+        }
+        @media print {
+            @page { size: A4 landscape !important; margin: 5mm !important; }
         }
     `;
     document.head.appendChild(styleOverride);
@@ -2359,14 +2403,68 @@ function openAdminHome() {
     goToPage('adminHomePage');
 }
 
+// --- CUSTOM PASSWORD MODAL (shows dots for security) ---
+function showPasswordModal(message) {
+    return new Promise((resolve) => {
+        // Remove any existing modal
+        const existing = document.getElementById('customPasswordModalOverlay');
+        if (existing) existing.remove();
+
+        const overlay = document.createElement('div');
+        overlay.id = 'customPasswordModalOverlay';
+        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:99999;display:flex;justify-content:center;align-items:center;';
+
+        const modal = document.createElement('div');
+        modal.style.cssText = 'background:white;padding:25px 30px;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,0.3);text-align:center;min-width:300px;max-width:400px;font-family:Segoe UI,Tahoma,Geneva,Verdana,sans-serif;';
+
+        const msg = document.createElement('p');
+        msg.textContent = message;
+        msg.style.cssText = 'margin-bottom:15px;font-size:14px;color:#2c3e50;font-weight:500;';
+
+        const input = document.createElement('input');
+        input.type = 'password';
+        input.placeholder = 'Enter password';
+        input.style.cssText = 'width:100%;padding:10px 12px;border:1px solid #cc6600;border-radius:8px;font-size:14px;text-align:center;box-sizing:border-box;';
+
+        const btnRow = document.createElement('div');
+        btnRow.style.cssText = 'display:flex;gap:10px;margin-top:15px;justify-content:center;';
+
+        const okBtn = document.createElement('button');
+        okBtn.textContent = 'OK';
+        okBtn.style.cssText = 'padding:10px 25px;background:#1a2a6c;color:white;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;width:auto;max-width:none;margin:0;';
+        okBtn.onclick = () => { overlay.remove(); resolve(input.value); };
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.style.cssText = 'padding:10px 25px;background:#e74c3c;color:white;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;width:auto;max-width:none;margin:0;';
+        cancelBtn.onclick = () => { overlay.remove(); resolve(null); };
+
+        btnRow.appendChild(okBtn);
+        btnRow.appendChild(cancelBtn);
+        modal.appendChild(msg);
+        modal.appendChild(input);
+        modal.appendChild(btnRow);
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+
+        input.focus();
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { overlay.remove(); resolve(input.value); }
+            if (e.key === 'Escape') { overlay.remove(); resolve(null); }
+        });
+    });
+}
+
 async function openUploadsAuth() {
     const token = document.getElementById('githubToken').value;
     if (!token) {
         alert('You need Authorization Code.');
         return;
     }
-    const uploadPass = prompt('Enter password to access File Uploads:');
-    if (uploadPass !== 'exam00n') {
+    // Custom password modal with masked input (dots)
+    const pass = await showPasswordModal('Enter password to access File Uploads:');
+    if (pass === null) return; // User cancelled
+    if (pass !== 'exam00n') {
         alert('Incorrect password. Access denied.');
         return;
     }
@@ -2471,6 +2569,92 @@ async function archiveExamData() {
         hideLoading();
         console.error('Archive failed:', error);
         statusEl.textContent = 'Archive failed: ' + safeMsg(error);
+        statusEl.style.color = '#e74c3c';
+    }
+}
+
+// --- FUNCTION TO CLEAR ARCHIVE DATA ---
+async function clearArchiveData() {
+    const token = document.getElementById('githubToken').value;
+    const form = document.getElementById('archiveClassSelect').value;
+    const year = document.getElementById('archiveYearInput').value.trim();
+    const term = document.getElementById('archiveTermSelect').value;
+    const statusEl = document.getElementById('archiveClearStatus');
+
+    if (!token) {
+        statusEl.textContent = 'Authorization Code required.';
+        statusEl.style.color = '#e74c3c';
+        return;
+    }
+    if (!form) {
+        statusEl.textContent = 'Please select a Class.';
+        statusEl.style.color = '#e74c3c';
+        return;
+    }
+    if (!year) {
+        statusEl.textContent = 'Please enter a Year.';
+        statusEl.style.color = '#e74c3c';
+        return;
+    }
+    if (!term) {
+        statusEl.textContent = 'Please select a Term.';
+        statusEl.style.color = '#e74c3c';
+        return;
+    }
+
+    const archiveFileName = `${form}_${year}_Term${term}.csv`;
+
+    if (!confirm(`WARNING: This will permanently delete the archived data for:\n\n${form.toUpperCase()} - Year ${year} - Term ${term}\n\nFile: ${archiveFileName}\n\nThis action cannot be undone. Continue?`)) {
+        return;
+    }
+
+    statusEl.textContent = 'Deleting archive...';
+    statusEl.style.color = '#f39c12';
+
+    try {
+        // First, get the file to retrieve its SHA (required for deletion)
+        const checkResponse = await fetch(`${ARCHIVE_API_BASE}${archiveFileName}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!checkResponse.ok) {
+            statusEl.textContent = `No archive found for ${form.toUpperCase()} - ${year} Term ${term}. Nothing to delete.`;
+            statusEl.style.color = '#e74c3c';
+            return;
+        }
+
+        const fileData = await checkResponse.json();
+        const fileSha = fileData.sha;
+
+        // Delete the file using GitHub API
+        const deleteResponse = await fetch(`${ARCHIVE_API_BASE}${archiveFileName}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Accept': 'application/vnd.github.v3+json',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                message: `Delete archive: ${form} - Year ${year} Term ${term} (${new Date().toLocaleString()})`,
+                sha: fileSha,
+                branch: 'main'
+            })
+        });
+
+        if (!deleteResponse.ok) {
+            const errData = await deleteResponse.json();
+            throw new Error(errData.message || 'Delete failed');
+        }
+
+        // Clear the cache for this file
+        archiveDataCache = {};
+
+        statusEl.textContent = `Successfully deleted archive for ${form.toUpperCase()} - ${year} Term ${term}!`;
+        statusEl.style.color = '#2ecc71';
+
+    } catch (error) {
+        console.error('Archive delete failed:', error);
+        statusEl.textContent = 'Failed to delete archive: ' + safeMsg(error);
         statusEl.style.color = '#e74c3c';
     }
 }
@@ -3492,7 +3676,7 @@ async function displayGradesSheet() {
     const isUpperForm = form === 'form3' || form === 'form4';
     const finalColHeader = isUpperForm ? 'Aggregate' : 'Total';
 
-    let html = `<table id="gradesTable"><thead><tr><th style="width:5%;">POS</th><th style="width:10%;">Exam No</th><th style="width:15%;">Name</th><th style="width:5%;">SEX</th><th style="width:5%;">SNE<br><span style="font-weight:normal;font-size:0.8em;">(SN)</span></th>`;
+    let html = `<table id="gradesTable"><thead><tr><th style="width:5%;">POS</th><th style="width:5%;">Reg</th><th style="width:15%;">Name</th><th style="width:5%;">SEX</th><th style="width:5%;">SNE<br><span style="font-weight:normal;font-size:0.8em;">(SN)</span></th>`;
     ALL_SUBJECTS.forEach(sub => { 
         // --- SURGICAL FIX: Skip hidden subjects ---
         if (currentConfig && currentConfig.hiddenSubjects && currentConfig.hiddenSubjects[form] && currentConfig.hiddenSubjects[form][sub]) return;
@@ -4471,6 +4655,20 @@ function populateClearSubjectSelect() {
     });
 }
 
+// --- FUNCTION TO EXPORT MARK SHEET WITH SCHOOL NAME, CLASS, TERM, YEAR ---
+function exportMarkSheetWithFilename() {
+    const form = document.getElementById('sheetClassSelect').value;
+    if (!form) {
+        alert('Please select a Class first.');
+        return;
+    }
+    const formDisplay = form.toUpperCase().replace('FORM', 'Form ');
+    const term = currentConfig ? currentConfig.term : '';
+    const year = currentConfig ? (currentConfig.year || '2025') : '2025';
+    const filename = `Namitete_Secondary_${formDisplay}_MarkSheet_Term${term}_${year}`;
+    exportToExcel('scoresTable', filename);
+}
+
 // --- FUNCTION TO EXPORT GRADE SHEET WITH SCHOOL NAME AND CLASS ---
 function exportGradeSheetWithFilename() {
     const form = document.getElementById('gradesClassSelect').value;
@@ -4479,7 +4677,9 @@ function exportGradeSheetWithFilename() {
         return;
     }
     const formDisplay = form.toUpperCase().replace('FORM', 'Form ');
-    const filename = `Namitete_Secondary_${formDisplay}_GradeSheet`;
+    const term = currentConfig ? currentConfig.term : '';
+    const year = currentConfig ? (currentConfig.year || '2025') : '2025';
+    const filename = `Namitete_Secondary_${formDisplay}_GradeSheet_Term${term}_${year}`;
     exportToExcel('gradesTable', filename);
 }
 
