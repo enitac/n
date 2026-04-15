@@ -1083,37 +1083,18 @@ src="https://raw.githubusercontent.com/enitac/n/main/logo.png" class="logo" alt=
 
 <hr style="margin: 20px 0; border: 1px solid #ccc;">
 <h3>Grade Range Editor</h3>
-<p style="font-size:0.9em; color:#7f8c8d; margin-bottom:10px;">Update the grade boundaries below. Changes apply instantly to all calculations, reports, and sheets.</p>
-<div style="display: flex; justify-content: space-around; flex-wrap: wrap; gap: 20px; margin-top: 15px;">
-    <div style="min-width: 280px; flex: 1;">
-        <h4 style="text-align: center; margin-bottom: 10px; color: #1a2a6c;">Forms 1 &amp; 2 (A-F Grades)</h4>
-        <div class="table-wrapper">
-            <table id="lowerGradeEditor">
-                <thead>
-                    <tr style="background: #ecf0f1;">
-                        <th style="border: 1px solid #ccc; padding: 10px; text-align: center;">Grade</th>
-                        <th style="border: 1px solid #ccc; padding: 10px; text-align: center;">Min. Score</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
-        </div>
-    </div>
-    <div style="min-width: 280px; flex: 1;">
-        <h4 style="text-align: center; margin-bottom: 10px; color: #1a2a6c;">Forms 3 &amp; 4 (1-9 Grades)</h4>
-        <div class="table-wrapper">
-            <table id="upperGradeEditor">
-                <thead>
-                    <tr style="background: #ecf0f1;">
-                        <th style="border: 1px solid #ccc; padding: 10px; text-align: center;">Grade</th>
-                        <th style="border: 1px solid #ccc; padding: 10px; text-align: center;">Min. Score</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
-        </div>
-    </div>
-</div>
+<p style="font-size:0.9em; color:#7f8c8d; margin-bottom:10px;">Select a class below to view and upgrade its grading boundaries. Changes save to GitHub and refresh all sheets instantly.</p>
+
+<label for="gradeEditorClassSelect" style="font-size:1em; color:#1a2a6c; font-weight:700;">Choose Class to Upgrade:</label>
+<select id="gradeEditorClassSelect" onchange="populateGradeEditors()">
+    <option value="">-- Select Class --</option>
+    <option value="form1">Form 1</option>
+    <option value="form2">Form 2</option>
+    <option value="form3">Form 3</option>
+    <option value="form4">Form 4</option>
+</select>
+
+<div id="gradeEditorTableContainer" style="margin-top: 15px;"></div>
 
 <hr style="margin: 20px 0; border: 1px solid #ccc;">
 <h3>Portal Access Control</h3>
@@ -1218,7 +1199,7 @@ src="https://raw.githubusercontent.com/enitac/n/main/logo.png" class="logo" alt=
             <option value="form4">Form 4</option>
         </select>
         <label for="progressExamNumber">Enter Exam Number</label>
-        <input type="text" id="progressExamNumber" placeholder="e.g. J047 or M047">
+        <input type="text" id="progressExamNumber" placeholder="e.g. 000N or 000E">
         <button onclick="openStudentProgressSheet()" style="margin-top: 10px;">View Student Progress</button>
         <button onclick="generateAllProgressReports()" style="margin-top: 10px; background: #28a745;">Progress Report Generator (Batch PDF)</button>
     </div>
@@ -1514,6 +1495,14 @@ function getDefaultConfig() {
             hiddenSubjects[form][subject] = false;
         });
     });
+    const gradeKeys = {};
+    ALL_CLASSES.forEach(form => {
+        if (form === 'form1' || form === 'form2') {
+            gradeKeys[form] = JSON.parse(JSON.stringify(GRADE_KEY_LOWER));
+        } else {
+            gradeKeys[form] = JSON.parse(JSON.stringify(GRADE_KEY_UPPER));
+        }
+    });
     return {
         locks: {},
         term: '3',
@@ -1523,6 +1512,7 @@ function getDefaultConfig() {
         fees: '',
         gradeKeyLower: GRADE_KEY_LOWER,
         gradeKeyUpper: GRADE_KEY_UPPER,
+        gradeKeys: gradeKeys,
         teachers: teachers,
         hiddenSubjects: hiddenSubjects,
         passwordEnabled: true
@@ -1554,13 +1544,24 @@ function getGradeAndRemark(form, score) {
     try {
         const isLowerForm = form === 'form1' || form === 'form2';
         
-        // Ensure currentConfig and grade keys are available
-        if (!currentConfig || !currentConfig.gradeKeyLower || !currentConfig.gradeKeyUpper) {
+        // Ensure currentConfig is available
+        if (!currentConfig) {
             console.error('Grade configuration not loaded');
             return { grade: '-', remark: 'Config Error' };
         }
         
-        const key = isLowerForm ? currentConfig.gradeKeyLower : currentConfig.gradeKeyUpper;
+        // Per-class grade key with fallback to legacy keys
+        let key;
+        if (currentConfig.gradeKeys && currentConfig.gradeKeys[form]) {
+            key = currentConfig.gradeKeys[form];
+        } else if (isLowerForm && currentConfig.gradeKeyLower) {
+            key = currentConfig.gradeKeyLower;
+        } else if (!isLowerForm && currentConfig.gradeKeyUpper) {
+            key = currentConfig.gradeKeyUpper;
+        } else {
+            console.error('Grade configuration not loaded');
+            return { grade: '-', remark: 'Config Error' };
+        }
         let grade = '-';
         let remark = '-';
 
@@ -1734,7 +1735,15 @@ function generateHeadComment(form, student, average, passCount, totalSubjects, p
 
 function getGradeKeyTableHTML(form) {
     const isLower = form === 'form1' || form === 'form2';
-    const key = isLower ? currentConfig.gradeKeyLower : currentConfig.gradeKeyUpper;
+    // Per-class grade key with fallback to legacy
+    let key;
+    if (currentConfig.gradeKeys && currentConfig.gradeKeys[form]) {
+        key = currentConfig.gradeKeys[form];
+    } else if (isLower) {
+        key = currentConfig.gradeKeyLower || GRADE_KEY_LOWER;
+    } else {
+        key = currentConfig.gradeKeyUpper || GRADE_KEY_UPPER;
+    }
     let html = `
         <table id="reportGradeKeyTable">
         <thead>
@@ -2008,7 +2017,8 @@ async function fetchConfig(token) {
             ...defaultConfig,
             ...content,
             teachers: { ...defaultConfig.teachers, ...content.teachers },
-            hiddenSubjects: content.hiddenSubjects || defaultConfig.hiddenSubjects // Load hidden state
+            hiddenSubjects: content.hiddenSubjects || defaultConfig.hiddenSubjects,
+            gradeKeys: content.gradeKeys || defaultConfig.gradeKeys
         };
 
         return { config: currentConfig, sha: configSha };
@@ -2066,8 +2076,9 @@ async function handleSaveConfig() {
         fees: document.getElementById('feesInput').value,
         gradeKeyLower: currentConfig.gradeKeyLower,
         gradeKeyUpper: currentConfig.gradeKeyUpper,
+        gradeKeys: currentConfig.gradeKeys || {},
         teachers: {},
-        hiddenSubjects: currentConfig.hiddenSubjects || {}, // Save hidden state
+        hiddenSubjects: currentConfig.hiddenSubjects || {},
         passwordEnabled: currentConfig.passwordEnabled
     };
 
@@ -3765,7 +3776,15 @@ async function displayAnalysisSheet(form) {
     document.getElementById('analysisTitle').textContent = `NAMITETE SECONDARY SCHOOL - ${form.toUpperCase().replace('FORM', 'Form ')} Class Analysis Report`;
 
     const isLowerForm = form === 'form1' || form === 'form2';
-    const gradeKey = isLowerForm ? currentConfig.gradeKeyLower : currentConfig.gradeKeyUpper;
+    // Per-class grade key with fallback to legacy
+    let gradeKey;
+    if (currentConfig.gradeKeys && currentConfig.gradeKeys[form]) {
+        gradeKey = currentConfig.gradeKeys[form];
+    } else if (isLowerForm) {
+        gradeKey = currentConfig.gradeKeyLower || GRADE_KEY_LOWER;
+    } else {
+        gradeKey = currentConfig.gradeKeyUpper || GRADE_KEY_UPPER;
+    }
     const gradeLabels = Object.keys(gradeKey);
 
     gradeLabels.sort((a, b) => {
@@ -4481,67 +4500,180 @@ function populateTeacherInputs() {
 </script>
 
 <script>
-// --- SURGICAL FIX: Grade Range Editor and Visibility Control ---
+// --- Grade Range Editor: Per-Class with Auto-Save & Instant Refresh ---
 function populateGradeEditors() {
     if (!currentConfig) {
         console.warn('Config not loaded for grade editors');
         return;
     }
-    // Lower Forms 1 & 2
-    let lowerTable = document.getElementById('lowerGradeEditor');
-    if (lowerTable) {
-        const tbody = lowerTable.querySelector('tbody');
-        tbody.innerHTML = '';
-        const lowerKeys = Object.keys(currentConfig.gradeKeyLower).sort((a, b) => currentConfig.gradeKeyLower[b] - currentConfig.gradeKeyLower[a]);
-        lowerKeys.forEach(grade => {
-            const minScore = currentConfig.gradeKeyLower[grade];
-            const rowHTML = `
-                <tr>
-                    <td style="border:1px solid #ccc; padding:8px; text-align:center; font-weight:bold;">${grade}</td>
-                    <td style="border:1px solid #ccc; padding:8px;">
-                        <input type="number" value="${minScore}" style="width:100%; padding:5px; text-align:center; border:1px solid #98FB98;" 
-                        onchange="updateGradeRange('lower', '${grade}', this.value)">
-                    </td>
-                </tr>
-            `;
-            tbody.innerHTML += rowHTML;
-        });
+    const container = document.getElementById('gradeEditorTableContainer');
+    if (!container) return;
+
+    const form = document.getElementById('gradeEditorClassSelect').value;
+    if (!form) {
+        container.innerHTML = '<p style="text-align:center;color:#7f8c8d;padding:15px;">Please select a class above to view its grading boundaries.</p>';
+        return;
     }
-    // Upper Forms 3 & 4
-    let upperTable = document.getElementById('upperGradeEditor');
-    if (upperTable) {
-        const tbody = upperTable.querySelector('tbody');
-        tbody.innerHTML = '';
-        const upperKeys = Object.keys(currentConfig.gradeKeyUpper).sort((a, b) => parseInt(a) - parseInt(b));
-        upperKeys.forEach(grade => {
-            const minScore = currentConfig.gradeKeyUpper[grade];
-            const rowHTML = `
-                <tr>
-                    <td style="border:1px solid #ccc; padding:8px; text-align:center; font-weight:bold;">${grade}</td>
-                    <td style="border:1px solid #ccc; padding:8px;">
-                        <input type="number" value="${minScore}" style="width:100%; padding:5px; text-align:center; border:1px solid #98FB98;" 
-                        onchange="updateGradeRange('upper', '${grade}', this.value)">
-                    </td>
-                </tr>
-            `;
-            tbody.innerHTML += rowHTML;
-        });
+
+    const isLowerForm = (form === 'form1' || form === 'form2');
+    const gradeTypeLabel = isLowerForm ? 'A-F Grades' : '1-9 Grades';
+    const formDisplay = form.toUpperCase().replace('FORM', 'Form ');
+
+    // Get the per-class grade key (with fallback)
+    let gradeKey;
+    if (currentConfig.gradeKeys && currentConfig.gradeKeys[form]) {
+        gradeKey = currentConfig.gradeKeys[form];
+    } else if (isLowerForm) {
+        gradeKey = currentConfig.gradeKeyLower || GRADE_KEY_LOWER;
+    } else {
+        gradeKey = currentConfig.gradeKeyUpper || GRADE_KEY_UPPER;
     }
+
+    let keys;
+    if (isLowerForm) {
+        keys = Object.keys(gradeKey).sort((a, b) => gradeKey[b] - gradeKey[a]);
+    } else {
+        keys = Object.keys(gradeKey).sort((a, b) => parseInt(a) - parseInt(b));
+    }
+
+    let rows = '';
+    keys.forEach(grade => {
+        const minScore = gradeKey[grade];
+        rows += `
+            <tr>
+                <td style="border:1px solid #ccc; padding:8px; text-align:center; font-weight:bold;">${grade}</td>
+                <td style="border:1px solid #ccc; padding:8px;">
+                    <input type="number" value="${minScore}" style="width:100%; padding:5px; text-align:center; border:1px solid #98FB98;" 
+                    onchange="updateGradeRange('${form}', '${grade}', this.value)">
+                </td>
+            </tr>
+        `;
+    });
+
+    container.innerHTML = `
+        <div style="text-align:center; margin-bottom:10px;">
+            <h4 style="color:#1a2a6c; margin:0;">${formDisplay} &mdash; ${gradeTypeLabel}</h4>
+        </div>
+        <div class="table-wrapper" style="max-width:350px; margin:0 auto;">
+            <table id="activeGradeEditor">
+                <thead>
+                    <tr style="background: #ecf0f1;">
+                        <th style="border: 1px solid #ccc; padding: 10px; text-align: center;">Grade</th>
+                        <th style="border: 1px solid #ccc; padding: 10px; text-align: center;">Min. Score</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>
+        <p style="font-size:0.85em; color:#28a745; text-align:center; margin-top:8px;">Changes auto-save to GitHub and refresh all sheets instantly.</p>
+    `;
 }
 
-function updateGradeRange(type, gradeKey, newValue) {
+async function updateGradeRange(form, gradeKey, newValue) {
     const val = parseInt(newValue);
     if (isNaN(val)) {
         alert('Please enter a valid number for the score range.');
         populateGradeEditors();
         return;
     }
-    if (type === 'lower') {
-        currentConfig.gradeKeyLower[gradeKey] = val;
-    } else if (type === 'upper') {
-        currentConfig.gradeKeyUpper[gradeKey] = val;
+
+    if (!currentConfig.gradeKeys) currentConfig.gradeKeys = {};
+    if (!currentConfig.gradeKeys[form]) {
+        const isLower = (form === 'form1' || form === 'form2');
+        currentConfig.gradeKeys[form] = JSON.parse(JSON.stringify(isLower ? (currentConfig.gradeKeyLower || GRADE_KEY_LOWER) : (currentConfig.gradeKeyUpper || GRADE_KEY_UPPER)));
     }
-    console.log(`Grade range updated: ${type} ${gradeKey} = ${val}`);
+
+    currentConfig.gradeKeys[form][gradeKey] = val;
+    console.log(`Grade range updated: ${form} ${gradeKey} = ${val}`);
+
+    // INSTANT REFRESH: Refresh all visible sheets for ALL classes
+    refreshAllVisibleSheets();
+
+    // INSTANT GITHUB SAVE: Fire-and-forget for speed
+    instantSaveGradeConfigToGitHub();
+}
+
+async function instantSaveGradeConfigToGitHub() {
+    const token = document.getElementById('githubToken');
+    if (!token || !token.value) {
+        console.warn('No token available for instant grade save.');
+        return;
+    }
+    try {
+        const saveConfig = {
+            term: currentConfig.term,
+            year: currentConfig.year || '2025',
+            generalComment: currentConfig.generalComment || '',
+            nextTermOpens: currentConfig.nextTermOpens || '',
+            fees: currentConfig.fees || '',
+            gradeKeyLower: currentConfig.gradeKeyLower,
+            gradeKeyUpper: currentConfig.gradeKeyUpper,
+            gradeKeys: currentConfig.gradeKeys,
+            teachers: currentConfig.teachers || {},
+            hiddenSubjects: currentConfig.hiddenSubjects || {},
+            passwordEnabled: currentConfig.passwordEnabled
+        };
+
+        const jsonContent = JSON.stringify(saveConfig, null, 2);
+        const base64Content = btoa(unescape(encodeURIComponent(jsonContent)));
+        const commitMessage = `Grade update: ${new Date().toLocaleString()}`;
+
+        const result = await commitFile(
+            CONFIG_FILE,
+            commitMessage,
+            base64Content,
+            configSha,
+            token.value,
+            'PUT'
+        );
+
+        if (result) {
+            configSha = result.content.sha;
+            console.log('Grade config saved to GitHub instantly.');
+        }
+    } catch (error) {
+        console.error('Instant grade save failed (non-blocking):', error);
+    }
+}
+
+function refreshAllVisibleSheets() {
+    // Refresh mark sheet if visible
+    const sheetForm = document.getElementById('sheetClassSelect');
+    if (sheetForm && sheetForm.value) {
+        displayScoreSheet();
+    }
+
+    // Refresh grade sheet if visible
+    const gradesForm = document.getElementById('gradesClassSelect');
+    if (gradesForm && gradesForm.value) {
+        displayGradesSheet();
+    }
+
+    // Refresh analysis sheet if visible
+    const analysisForm = document.getElementById('analysisClassSelect');
+    if (analysisForm && analysisForm.value) {
+        displayAnalysisSheet(analysisForm.value);
+    }
+
+    // Refresh progress report if visible
+    const progressReport = document.getElementById('progressReport');
+    if (progressReport && progressReport.style.display === 'block') {
+        const form = document.getElementById('selectedForm').value;
+        const examNo = document.getElementById('studentNumberInput').value.trim().toUpperCase();
+        if (form && examNo) {
+            loadResults(false);
+        }
+    }
+
+    // Refresh brief report if visible
+    const briefReport = document.getElementById('briefReport');
+    if (briefReport && briefReport.style.display === 'block') {
+        const form = document.getElementById('selectedForm').value;
+        const examNo = document.getElementById('studentNumberInput').value.trim().toUpperCase();
+        if (form && examNo) {
+            loadResults(true);
+        }
+    }
 }
 
 // --- SURGICAL FIX: SUBJECT VISIBILITY LOGIC ---
