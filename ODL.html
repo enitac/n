@@ -328,8 +328,9 @@ function saveSelectedSubjectsToRepo() {
     #briefResultsTable {
         width: 100%;
         border-collapse: collapse;
-        font-size: 0.9em;
+        font-size: 0.7em;
         border: 1px solid black;
+        table-layout: fixed;
     }
 
     .table-wrapper {
@@ -347,8 +348,10 @@ function saveSelectedSubjectsToRepo() {
     #scoresTable th, #scoresTable td,
     #briefResultsTable th, #briefResultsTable td {
         border: 1px solid black;
-        padding: 10px 8px;
-        white-space: nowrap; /* Prevent messy wrapping in wide tables */
+        padding: 6px 4px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     #resultsTable th, #gradesTable th, #analysisTable th, #scoresTable th, #briefResultsTable th {
@@ -1199,7 +1202,7 @@ src="https://raw.githubusercontent.com/enitac/n/main/logo.png" class="logo" alt=
             <option value="form4">Form 4</option>
         </select>
         <label for="progressExamNumber">Enter Exam Number</label>
-        <input type="text" id="progressExamNumber" placeholder="e.g. 000N or 000E">
+        <input type="text" id="progressExamNumber" placeholder="e.g. J047 or M047">
         <button onclick="openStudentProgressSheet()" style="margin-top: 10px;">View Student Progress</button>
         <button onclick="generateAllProgressReports()" style="margin-top: 10px; background: #28a745;">Progress Report Generator (Batch PDF)</button>
     </div>
@@ -1294,6 +1297,41 @@ const ALL_HEADERS = [...BASE_HEADERS, ...ALL_SUBJECTS];
 const ALL_CLASSES = ['form1', 'form2', 'form3', 'form4'];
 const DEFAULT_TEACHER = '-';
 const API_BASE = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/`;
+
+// --- SURGICAL FIX: Case-insensitive CSV header normalization ---
+const ALL_HEADERS_LOWER_MAP = {};
+ALL_HEADERS.forEach(h => { ALL_HEADERS_LOWER_MAP[h.toLowerCase()] = h; });
+
+function normalizeCSVData(csvText) {
+    const rawParsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+    if (!rawParsed.data || rawParsed.data.length === 0) return [];
+
+    const rawFields = rawParsed.meta.fields || [];
+    if (rawFields.length === 0) return rawParsed.data;
+
+    // Map each raw field to its standard ALL_HEADERS version (case-insensitive)
+    const fieldMap = {};
+    rawFields.forEach(f => {
+        const trimmed = f.trim();
+        const lower = trimmed.toLowerCase();
+        if (ALL_HEADERS_LOWER_MAP[lower]) {
+            fieldMap[f] = ALL_HEADERS_LOWER_MAP[lower];
+        } else if (lower === 'sn' || lower === 'sne' || lower === 'special needs') {
+            fieldMap[f] = 'SN';
+        } else {
+            fieldMap[f] = trimmed;
+        }
+    });
+
+    // Remap every row's keys to standardized names
+    return rawParsed.data.map(row => {
+        const newRow = {};
+        Object.keys(row).forEach(key => {
+            newRow[fieldMap[key] || key] = row[key];
+        });
+        return newRow;
+    });
+}
 
 // Grade boundary definitions
 const GRADE_KEY_LOWER = {
@@ -1968,20 +2006,7 @@ async function fetchClassData(form) {
             return [];
         }
         const csv = await response.text();
-        const parsed = Papa.parse(csv, { header: true, skipEmptyLines: true, columns: ALL_HEADERS });
-        const data = parsed.data.filter(s => s && s["Exam Number"]);
-        // Normalize Sex: handle CSV headers that don't exactly match "Sex" (e.g. "sex", "SEX", "Sex ")
-        if (data.length > 0 && data[0]["Sex"] === undefined) {
-            const rawParsed = Papa.parse(csv, { header: true, skipEmptyLines: true });
-            const sexKey = Object.keys(rawParsed.meta.fields || {}).find(k => k.trim().toLowerCase() === 'sex')
-                        || Object.keys(rawParsed.data[0] || {}).find(k => k.trim().toLowerCase() === 'sex');
-            if (sexKey) {
-                const examKey = Object.keys(rawParsed.data[0] || {}).find(k => k.trim().toLowerCase() === 'exam number') || "Exam Number";
-                const rawMap = {};
-                rawParsed.data.forEach(r => { if (r[examKey]) rawMap[r[examKey]] = r[sexKey]; });
-                data.forEach(s => { if (rawMap[s["Exam Number"]] !== undefined) s["Sex"] = rawMap[s["Exam Number"]]; });
-            }
-        }
+        const data = normalizeCSVData(csv).filter(s => s && s["Exam Number"]);
         currentClassData[form] = data;
         updateLoadingPercent(80);
         return data;
@@ -2173,7 +2198,13 @@ async function uploadCSV() {
         hideLoading();
         if (result) {
             alert(`File ${fileName} uploaded/updated successfully!`);
-            currentClassData[form] = null;
+            // --- SURGICAL FIX: Parse and cache uploaded data in memory for instant access ---
+            try {
+                const csvText = decodeURIComponent(escape(atob(base64Content)));
+                currentClassData[form] = normalizeCSVData(csvText).filter(s => s && s["Exam Number"]);
+            } catch(e) {
+                currentClassData[form] = null; // Fallback to re-fetch on next access
+            }
             currentDataSha[form] = result.content.sha;
             refreshFileList();
             fileInput.value = '';
@@ -2732,8 +2763,7 @@ async function searchArchiveResults() {
                     const csvResponse = await fetch(file.download_url);
                     if (!csvResponse.ok) continue;
                     const csvText = await csvResponse.text();
-                    const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
-                    archiveDataCache[file.download_url] = parsed.data;
+                    archiveDataCache[file.download_url] = normalizeCSVData(csvText);
                 }
 
                 const students = archiveDataCache[file.download_url];
@@ -4323,8 +4353,8 @@ async function refreshSubjectMonitor(form) {
             const response = await fetch(`https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/main/${form}.csv`);
             if (!response.ok) throw new Error("File not found");
             const csv = await response.text();
-            const parsed = Papa.parse(csv, { header: true, skipEmptyLines: true });
-            data = parsed.data;
+            const parsed = normalizeCSVData(csv);
+            data = parsed;
             currentClassData[form] = data; // Cache in memory
         } catch (err) {
             container.innerHTML = `<p style="color:red;margin-top:10px;">No data file found for ${form.toUpperCase()}.</p>`;
