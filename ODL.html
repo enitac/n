@@ -296,7 +296,7 @@ function saveSelectedSubjectsToRepo() {
         max-width: 400px;
         margin-top: 20px;
         padding: 14px;
-        background: #1a2a6c;
+        background:  #20B2AA;
         color: #fff;
         border: none;
         border-radius: 8px;
@@ -684,6 +684,35 @@ function saveSelectedSubjectsToRepo() {
         width: 100%;
         padding: 6px;
         font-size: 0.85em;
+    }
+}
+
+/* === MOBILE HORIZONTAL SCROLL FIX FOR MARK & GRADE SHEETS (SURGICAL) === */
+@media (max-width: 480px) {
+    #scoreSheetView .table-wrapper,
+    #gradesPage .table-wrapper {
+        overflow-x: auto !important;
+        max-width: 100% !important;
+        width: 100% !important;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    #scoreSheetView #scoresTable,
+    #gradesPage #gradesTable {
+        table-layout: auto !important;
+        width: max-content !important;
+        min-width: 100%;
+        font-size: 0.75em !important;
+    }
+
+    #scoreSheetView #scoresTable th,
+    #scoreSheetView #scoresTable td,
+    #gradesPage #gradesTable th,
+    #gradesPage #gradesTable td {
+        white-space: nowrap !important;
+        overflow: visible !important;
+        text-overflow: clip !important;
+        padding: 6px 8px !important;
     }
 }
 
