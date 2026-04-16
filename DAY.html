@@ -687,6 +687,38 @@ function saveSelectedSubjectsToRepo() {
     }
 }
 
+/* === MOBILE HORIZONTAL SCROLL FIX FOR MARK & GRADE SHEETS (SURGICAL) === */
+@media (max-width: 480px) {
+    #scoreSheetView,
+    #gradesPage {
+        overflow-x: visible !important;
+    }
+
+    #scoreSheetView .table-wrapper,
+    #gradesPage .table-wrapper {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    #scoreSheetView #scoresTable,
+    #gradesPage #gradesTable {
+        table-layout: auto !important;
+        width: max-content !important;
+        min-width: 100%;
+        font-size: 0.75em !important;
+    }
+
+    #scoreSheetView #scoresTable th,
+    #scoreSheetView #scoresTable td,
+    #gradesPage #gradesTable th,
+    #gradesPage #gradesTable td {
+        white-space: nowrap !important;
+        overflow: visible !important;
+        text-overflow: clip !important;
+        padding: 6px 8px !important;
+    }
+}
+
 .teacher-input-group {
     display: flex;
     justify-content: space-between;
