@@ -689,14 +689,11 @@ function saveSelectedSubjectsToRepo() {
 
 /* === MOBILE HORIZONTAL SCROLL FIX FOR MARK & GRADE SHEETS (SURGICAL) === */
 @media (max-width: 480px) {
-    #scoreSheetView,
-    #gradesPage {
-        overflow-x: visible !important;
-    }
-
     #scoreSheetView .table-wrapper,
     #gradesPage .table-wrapper {
         overflow-x: auto !important;
+        max-width: 100% !important;
+        width: 100% !important;
         -webkit-overflow-scrolling: touch;
     }
 
