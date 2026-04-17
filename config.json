@@ -192,5 +192,18 @@
       "Social/Life": false
     }
   },
+  "locks": {
+    "form1": {
+      "Agriculture": true,
+      "Bible Knowledge": true,
+      "Chemistry": true,
+      "Biology": true,
+      "Chichewa": true,
+      "Computer Studies": true,
+      "English": true,
+      "French": true,
+      "Geography": true
+    }
+  },
   "passwordEnabled": true
 }
