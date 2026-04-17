@@ -10,15 +10,20 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 <script>
-// --- EXCEL EXPORT FUNCTION ---
+// --- EXCEL EXPORT FUNCTION (FIXED: ensures fresh data) ---
 function exportToExcel(tableId, filename) {
     const table = document.getElementById(tableId);
     if (!table) {
-        alert("Table not found!");
+        alert("Table not found! Make sure the sheet is displayed first.");
         return;
     }
-    const wb = XLSX.utils.table_to_book(table, { sheet: "Sheet1" });
-    XLSX.writeFile(wb, filename + ".xlsx");
+    try {
+        const wb = XLSX.utils.table_to_book(table, { sheet: "Sheet1", raw: false });
+        XLSX.writeFile(wb, filename + ".xlsx");
+    } catch(e) {
+        console.error('Excel export error:', e);
+        alert('Export failed. Please ensure the table is visible and try again.');
+    }
 }
 
 // --- AUTO-LOAD TRIGGER ---
@@ -43,7 +48,7 @@ function populateLockSubjects() {
 }
 
 function toggleSubjectLock() {
-    const classSelect = document.getElementById('classTeacherDropdown');
+    const classSelect = document.getElementById('lockClassSelect');
     const selectedClass = classSelect ? classSelect.value : '';
 
     if (!selectedClass) {
@@ -58,12 +63,20 @@ function toggleSubjectLock() {
     if (!currentConfig.locks[selectedClass]) currentConfig.locks[selectedClass] = {};
 
     currentConfig.locks[selectedClass][subject] = !currentConfig.locks[selectedClass][subject];
+    const isNowLocked = currentConfig.locks[selectedClass][subject];
 
     const status = document.getElementById('lockStatus');
     status.innerHTML = selectedClass.toUpperCase() + ' - ' + subject + ' ' +
-        (currentConfig.locks[selectedClass][subject]
-            ? '<span class="lock-indicator locked">🔒 LOCKED</span>'
-            : '<span class="lock-indicator unlocked">🔓 UNLOCKED</span>');
+        (isNowLocked
+            ? '<span class="lock-indicator locked">LOCKED</span>'
+            : '<span class="lock-indicator unlocked">UNLOCKED</span>');
+
+    // REAL-TIME LOCK: If the data entry page is currently showing this class+subject, refresh it
+    const dataForm = document.getElementById('dataClassSelect');
+    const dataSubject = document.getElementById('dataSubjectSelect');
+    if (dataForm && dataSubject && dataForm.value === selectedClass && dataSubject.value === subject) {
+        showStudentMarksList();
+    }
 }
 
 function togglePasswordAccess() {
@@ -116,11 +129,48 @@ function saveScoresAsExcel() {
         return;
     }
     
+    const students = currentClassData[form];
+    if (!students || students.length === 0) {
+        alert('No student data loaded. Please select a Class and Subject first.');
+        return;
+    }
+    
     const formDisplay = form.toUpperCase().replace('FORM', 'Form ');
     const term = currentConfig ? currentConfig.term : '';
     const year = currentConfig ? (currentConfig.year || '2025') : '2025';
     const filename = `Namitete_Secondary_${formDisplay}_${subject}_Term${term}_${year}`;
-    exportToExcel('dataEntryTable', filename);
+    
+    try {
+        // Build data array programmatically from currentClassData
+        const data = [['Exam Number', "Student's Name", 'Sex', 'SNE', 'Score']];
+        students.forEach(s => {
+            data.push([
+                s['Exam Number'] || '',
+                s["STUDENT'S NAME"] || '',
+                s['Sex'] || '',
+                s['SN'] || '',
+                s[subject] || ''
+            ]);
+        });
+        
+        const ws = XLSX.utils.aoa_to_sheet(data);
+        
+        // Set column widths
+        ws['!cols'] = [
+            { wch: 14 },
+            { wch: 30 },
+            { wch: 6 },
+            { wch: 6 },
+            { wch: 10 }
+        ];
+        
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, subject);
+        XLSX.writeFile(wb, filename + '.xlsx');
+    } catch(e) {
+        console.error('Excel export error:', e);
+        alert('Export failed. Please try again.');
+    }
 }
 
 function saveSelectedSubjectsToRepo() {
@@ -296,7 +346,7 @@ function saveSelectedSubjectsToRepo() {
         max-width: 400px;
         margin-top: 20px;
         padding: 14px;
-        background:  #20B2AA;
+        background: #1a2a6c;
         color: #fff;
         border: none;
         border-radius: 8px;
@@ -489,6 +539,27 @@ function saveSelectedSubjectsToRepo() {
             width: 100% !important; 
             max-width: 400px !important; 
             margin: 10px auto 0 auto !important; 
+        }
+
+        /* SURGICAL FIX: Ensure print/export buttons are fully tappable on mobile */
+        #scoreSheetView button,
+        #gradesPage button,
+        #analysisPage button {
+            min-height: 44px !important;
+            font-size: 1em !important;
+            padding: 12px 16px !important;
+            cursor: pointer !important;
+            touch-action: manipulation !important;
+            -webkit-tap-highlight-color: transparent !important;
+        }
+
+        #scoreSheetView button.small-btn,
+        #gradesPage button.small-btn,
+        #analysisPage button.small-btn {
+            display: block !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 8px auto !important;
         }
     }
 
@@ -713,6 +784,58 @@ function saveSelectedSubjectsToRepo() {
         overflow: visible !important;
         text-overflow: clip !important;
         padding: 6px 8px !important;
+    }
+
+    /* Sticky header for horizontal scroll - keep thead fixed */
+    #scoreSheetView .table-wrapper,
+    #gradesPage .table-wrapper {
+        position: relative;
+    }
+}
+
+/* Landscape mobile horizontal scroll for mark/grade sheets */
+@media (max-width: 900px) and (orientation: landscape) {
+    #scoreSheetView .table-wrapper,
+    #gradesPage .table-wrapper {
+        overflow-x: auto !important;
+        max-width: 100% !important;
+        width: 100% !important;
+        -webkit-overflow-scrolling: touch;
+        max-height: calc(100vh - 180px) !important;
+        overflow-y: auto !important;
+    }
+
+    #scoreSheetView #scoresTable,
+    #gradesPage #gradesTable {
+        table-layout: auto !important;
+        width: max-content !important;
+        min-width: 100%;
+        font-size: 0.7em !important;
+    }
+
+    #scoreSheetView #scoresTable th,
+    #scoreSheetView #scoresTable td,
+    #gradesPage #gradesTable th,
+    #gradesPage #gradesTable td {
+        white-space: nowrap !important;
+        overflow: visible !important;
+        text-overflow: clip !important;
+        padding: 4px 6px !important;
+    }
+
+    /* Make thead sticky so it stays visible while scrolling */
+    #scoreSheetView #scoresTable thead,
+    #gradesPage #gradesTable thead {
+        position: sticky !important;
+        top: 0 !important;
+        z-index: 10 !important;
+        background: #ecf0f1 !important;
+    }
+
+    #scoreSheetView #scoresTable thead th,
+    #gradesPage #gradesTable thead th {
+        background: #ecf0f1 !important;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.15) !important;
     }
 }
 
@@ -960,6 +1083,7 @@ src="https://raw.githubusercontent.com/enitac/n/main/logo.png" class="logo" alt=
         </div>
     </div>
 
+    <p id="dataEntryLockIndicator" style="display:none; margin-top: 15px;"></p>
     <button onclick="saveSelectedSubjectsToRepo()">Save All Data to Cloud</button>
     <button onclick="saveScoresAsExcel()" style="background: #28a745;">Export list as Excel</button>
     <button onclick="openScoreSheetView()">Mark Sheet</button>
@@ -1107,10 +1231,18 @@ src="https://raw.githubusercontent.com/enitac/n/main/logo.png" class="logo" alt=
 <hr style="margin: 20px 0; border: 1px solid #ccc;">
 <h3>Lock / Unlock Score Entry</h3>
 
+<label for="lockClassSelect">Select Class:</label>
+<select id="lockClassSelect">
+    <option value="form1">Form 1</option>
+    <option value="form2">Form 2</option>
+    <option value="form3">Form 3</option>
+    <option value="form4">Form 4</option>
+</select>
+
 <label for="lockSubjectSelect">Select Subject:</label>
 <select id="lockSubjectSelect"></select>
 
-<button onclick="toggleSubjectLock()">🔒 Lock / Unlock</button>
+<button onclick="toggleSubjectLock()">Lock / Unlock</button>
 <p id="lockStatus" style="font-size:11px;color:#e74c3c;"></p>
 
 <hr style="margin: 20px 0; border: 1px solid #ccc;">
@@ -1943,14 +2075,17 @@ function printSheet(pageId) {
     `;
     document.head.appendChild(styleOverride);
 
-    window.print();
+    // Mobile fix: Use setTimeout to ensure styles are applied before print dialog
+    setTimeout(() => {
+        window.print();
+    }, 150);
 
     setTimeout(() => {
         const style = document.getElementById('landscapePrintStyle');
         if (style) {
             style.remove();
         }
-    }, 100);
+    }, 1000);
 }
 
 function safeMsg(error) {
@@ -4106,6 +4241,9 @@ async function showStudentMarksList() {
     tbody.innerHTML = '';
     panel.classList.remove('hidden');
 
+    // Check if this subject is locked for this class
+    const isLocked = currentConfig && currentConfig.locks && currentConfig.locks[form] && currentConfig.locks[form][subject];
+
     students.forEach((s, i) => {
         const examNo = s["Exam Number"];
         const name = s["STUDENT'S NAME"];
@@ -4114,6 +4252,7 @@ async function showStudentMarksList() {
         
         const snVal = s["SN"] || '';
         const row = document.createElement('tr');
+        const inputDisabled = isLocked ? 'readonly style="width:80px;padding:6px;text-align:center;border:1px solid #e74c3c;border-radius:4px;background:#f5f5f5;color:#999;"' : 'oninput="updateStudentScore(\'' + form + '\', ' + i + ', \'' + subject + '\', this.value)" style="width:80px;padding:6px;text-align:center;border:1px solid #cc6600;border-radius:4px;"';
         row.innerHTML = `
             <td style="border:1px solid #cc6600;padding:8px;text-align:center;">${examNo}</td>
             <td style="border:1px solid #cc6600;padding:8px;text-align:left;">${name}</td>
@@ -4130,13 +4269,29 @@ async function showStudentMarksList() {
                 <input type="text" 
                        id="score_${i}" 
                        value="${val}" 
-                       oninput="updateStudentScore('${form}', ${i}, '${subject}', this.value)"
-                       style="width:80px;padding:6px;text-align:center;border:1px solid #cc6600;border-radius:4px;"
+                       ${inputDisabled}
                        placeholder=" ">
             </td>
         `;
         tbody.appendChild(row);
     });
+
+    // Update the lock status indicator above Save All button
+    const lockIndicator = document.getElementById('dataEntryLockIndicator');
+    if (lockIndicator) {
+        if (isLocked) {
+            lockIndicator.textContent = 'Subject Locked';
+            lockIndicator.style.color = '#e74c3c';
+            lockIndicator.style.fontWeight = '700';
+            lockIndicator.style.fontSize = '1.1em';
+        } else {
+            lockIndicator.textContent = 'Subject Unlocked';
+            lockIndicator.style.color = '#2ecc71';
+            lockIndicator.style.fontWeight = '700';
+            lockIndicator.style.fontSize = '1.1em';
+        }
+        lockIndicator.style.display = 'block';
+    }
 }
 
 function updateStudentScore(form, index, subject, value) {
@@ -4147,6 +4302,16 @@ function updateStudentScore(form, index, subject, value) {
         const monitorSelect = document.getElementById('monitorClassSelect');
         if (monitorSelect && monitorSelect.value === form) {
             refreshSubjectMonitor(form);
+        }
+
+        // REAL-TIME SYNC: Refresh mark sheet and grade sheet if they are showing the same class
+        const scoreSheetClass = document.getElementById('sheetClassSelect');
+        if (scoreSheetClass && scoreSheetClass.value === form && document.getElementById('scoreSheetView').style.display === 'block') {
+            displayScoreSheet();
+        }
+        const gradesClass = document.getElementById('gradesClassSelect');
+        if (gradesClass && gradesClass.value === form && document.getElementById('gradesPage').style.display === 'block') {
+            displayGradesSheet();
         }
     }
 }
@@ -4847,12 +5012,14 @@ function populateClearSubjectSelect() {
 }
 
 // --- FUNCTION TO EXPORT MARK SHEET WITH SCHOOL NAME, CLASS, TERM, YEAR ---
-function exportMarkSheetWithFilename() {
+async function exportMarkSheetWithFilename() {
     const form = document.getElementById('sheetClassSelect').value;
     if (!form) {
         alert('Please select a Class first.');
         return;
     }
+    // Force-refresh the mark sheet from current memory data before export
+    await displayScoreSheet();
     const formDisplay = form.toUpperCase().replace('FORM', 'Form ');
     const term = currentConfig ? currentConfig.term : '';
     const year = currentConfig ? (currentConfig.year || '2025') : '2025';
@@ -4861,12 +5028,14 @@ function exportMarkSheetWithFilename() {
 }
 
 // --- FUNCTION TO EXPORT GRADE SHEET WITH SCHOOL NAME AND CLASS ---
-function exportGradeSheetWithFilename() {
+async function exportGradeSheetWithFilename() {
     const form = document.getElementById('gradesClassSelect').value;
     if (!form) {
         alert('Please select a Class first.');
         return;
     }
+    // Force-refresh the grade sheet from current memory data before export
+    await displayGradesSheet();
     const formDisplay = form.toUpperCase().replace('FORM', 'Form ');
     const term = currentConfig ? currentConfig.term : '';
     const year = currentConfig ? (currentConfig.year || '2025') : '2025';
