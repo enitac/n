@@ -37,12 +37,19 @@ function checkAndAutoLoad() {
 
 function populateLockSubjects() {
     const sel = document.getElementById('lockSubjectSelect');
+    const classSelect = document.getElementById('lockClassSelect');
     if (!sel) return;
+    const selectedClass = classSelect ? classSelect.value : '';
     sel.innerHTML = '';
     ALL_SUBJECTS.forEach(s => {
         const opt = document.createElement('option');
         opt.value = s;
-        opt.textContent = s;
+        const isHidden = currentConfig && currentConfig.locks && currentConfig.locks[selectedClass] && currentConfig.locks[selectedClass][s];
+        opt.textContent = isHidden ? '[HIDDEN] ' + s : s;
+        if (isHidden) {
+            opt.style.color = '#e74c3c';
+            opt.style.fontWeight = '700';
+        }
         sel.appendChild(opt);
     });
 }
@@ -52,7 +59,7 @@ function toggleSubjectLock() {
     const selectedClass = classSelect ? classSelect.value : '';
 
     if (!selectedClass) {
-        alert('Please select a Class before locking or unlocking a subject.');
+        alert('Please select a Class before hiding or unhiding a subject.');
         return;
     }
 
@@ -68,10 +75,13 @@ function toggleSubjectLock() {
     const status = document.getElementById('lockStatus');
     status.innerHTML = selectedClass.toUpperCase() + ' - ' + subject + ' ' +
         (isNowLocked
-            ? '<span class="lock-indicator locked">LOCKED</span>'
-            : '<span class="lock-indicator unlocked">UNLOCKED</span>');
+            ? '<span class="lock-indicator locked">HIDDEN</span>'
+            : '<span class="lock-indicator unlocked">UNHIDDEN</span>');
 
-    // REAL-TIME LOCK: If the data entry page is currently showing this class+subject, refresh it
+    // Refresh the dropdown to show updated mark
+    populateLockSubjects();
+
+    // REAL-TIME: If the data entry page is currently showing this class+subject, refresh it
     const dataForm = document.getElementById('dataClassSelect');
     const dataSubject = document.getElementById('dataSubjectSelect');
     if (dataForm && dataSubject && dataForm.value === selectedClass && dataSubject.value === subject) {
@@ -109,9 +119,13 @@ function populateDataSubjectSelect() {
     if (!sel) return;
     sel.innerHTML = '<option value="">-- Select Subject --</option>';
     ALL_SUBJECTS.forEach(s => {
-        // --- SURGICAL FIX: Check Visibility ---
+        // --- SURGICAL FIX: Check Visibility (subject hidden from portal) ---
         if (currentConfig && currentConfig.hiddenSubjects && currentConfig.hiddenSubjects[form] && currentConfig.hiddenSubjects[form][s]) {
             return; // Skip hidden subjects
+        }
+        // --- SURGICAL FIX: Check Hide/Unhide Score Entry ---
+        if (currentConfig && currentConfig.locks && currentConfig.locks[form] && currentConfig.locks[form][s]) {
+            return; // Skip subjects with hidden score entry
         }
         const opt = document.createElement('option');
         opt.value = s;
@@ -529,6 +543,11 @@ function saveSelectedSubjectsToRepo() {
         .teacher-input-group label { flex-basis: auto; text-align: center !important; }
         .teacher-input-group input[type="text"] { flex-basis: auto; text-align: center !important; }
 
+        /* Surgical Fix: Sheets Overview & Admin Home mobile scroll */
+        #sheetsPage, #adminHomePage {
+            overflow: visible !important;
+        }
+
         /* Surgical Fix: Sheets Overview & Initial Page Mobile Layout Alignment */
         #sheetsPage h2, #initialPage h2 { margin-top: 40px; }
         #sheetsPage div[style*="display: flex"], #initialPage div[style*="display: flex"] { 
@@ -544,7 +563,10 @@ function saveSelectedSubjectsToRepo() {
         /* SURGICAL FIX: Ensure print/export buttons are fully tappable on mobile */
         #scoreSheetView button,
         #gradesPage button,
-        #analysisPage button {
+        #analysisPage button,
+        #progressReport button,
+        #briefReport button,
+        #archiveStudentDetail button {
             min-height: 44px !important;
             font-size: 1em !important;
             padding: 12px 16px !important;
@@ -556,6 +578,15 @@ function saveSelectedSubjectsToRepo() {
         #scoreSheetView button.small-btn,
         #gradesPage button.small-btn,
         #analysisPage button.small-btn {
+            display: block !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 8px auto !important;
+        }
+
+        #progressReport button.view-btn,
+        #briefReport button.view-btn,
+        #archiveStudentDetail button.small-btn {
             display: block !important;
             width: 100% !important;
             max-width: 100% !important;
@@ -1229,10 +1260,10 @@ src="https://raw.githubusercontent.com/enitac/n/main/logo.png" class="logo" alt=
     <button onclick="refreshFileList()">↻ Refresh List</button>
 
 <hr style="margin: 20px 0; border: 1px solid #ccc;">
-<h3>Lock / Unlock Score Entry</h3>
+<h3>Hide / Unhide Subject Score Entry</h3>
 
 <label for="lockClassSelect">Select Class:</label>
-<select id="lockClassSelect">
+<select id="lockClassSelect" onchange="populateLockSubjects()">
     <option value="form1">Form 1</option>
     <option value="form2">Form 2</option>
     <option value="form3">Form 3</option>
@@ -1242,7 +1273,7 @@ src="https://raw.githubusercontent.com/enitac/n/main/logo.png" class="logo" alt=
 <label for="lockSubjectSelect">Select Subject:</label>
 <select id="lockSubjectSelect"></select>
 
-<button onclick="toggleSubjectLock()">Lock / Unlock</button>
+<button onclick="toggleSubjectLock()">Subject Score Entry Hidden/Unhidden</button>
 <p id="lockStatus" style="font-size:11px;color:#e74c3c;"></p>
 
 <hr style="margin: 20px 0; border: 1px solid #ccc;">
@@ -2268,6 +2299,7 @@ async function handleSaveConfig() {
         gradeKeys: currentConfig.gradeKeys || {},
         teachers: {},
         hiddenSubjects: currentConfig.hiddenSubjects || {},
+        locks: currentConfig.locks || {},
         passwordEnabled: currentConfig.passwordEnabled
     };
 
@@ -4276,16 +4308,16 @@ async function showStudentMarksList() {
         tbody.appendChild(row);
     });
 
-    // Update the lock status indicator above Save All button
+    // Update the hide/unhide status indicator above Save All button
     const lockIndicator = document.getElementById('dataEntryLockIndicator');
     if (lockIndicator) {
         if (isLocked) {
-            lockIndicator.textContent = 'Subject Locked';
+            lockIndicator.textContent = 'Subject Hidden';
             lockIndicator.style.color = '#e74c3c';
             lockIndicator.style.fontWeight = '700';
             lockIndicator.style.fontSize = '1.1em';
         } else {
-            lockIndicator.textContent = 'Subject Unlocked';
+            lockIndicator.textContent = 'Subject Unhidden';
             lockIndicator.style.color = '#2ecc71';
             lockIndicator.style.fontWeight = '700';
             lockIndicator.style.fontSize = '1.1em';
