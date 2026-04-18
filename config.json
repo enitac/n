@@ -220,6 +220,9 @@
       "Physics": true,
       "Social/Life": true,
       "Computer Studies": true
+    },
+    "form2": {
+      "Chichewa": false
     }
   },
   "passwordEnabled": false,
