@@ -204,6 +204,22 @@
       "French": false,
       "Geography": false,
       "Home Economics": false
+    },
+    "form4": {
+      "Agriculture": true,
+      "Bible Knowledge": true,
+      "Biology": true,
+      "Chemistry": true,
+      "Chichewa": true,
+      "English": true,
+      "Geography": true,
+      "French": true,
+      "History": true,
+      "Home Economics": true,
+      "Mathematics": true,
+      "Physics": true,
+      "Social/Life": true,
+      "Computer Studies": true
     }
   },
   "passwordEnabled": false,
