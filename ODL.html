@@ -10,6 +10,9 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 <script>
+// --- SURGICAL FIX: Disable all alert() popups globally ---
+window.alert = function() {};
+
 // --- EXCEL EXPORT FUNCTION (FIXED: ensures fresh data) ---
 function exportToExcel(tableId, filename) {
     const table = document.getElementById(tableId);
@@ -80,6 +83,15 @@ function toggleSubjectLock() {
 
     // Refresh the dropdown to show updated mark
     populateLockSubjects();
+
+    // SURGICAL FIX: Immediately refresh the data entry subject dropdown so hidden/unhidden subjects appear instantly
+    populateDataSubjectSelect();
+
+    // SURGICAL FIX: Immediately refresh the monitor table if currently visible
+    const monitorClass = document.getElementById('monitorClassSelect');
+    if (monitorClass && monitorClass.value) {
+        refreshSubjectMonitor(monitorClass.value);
+    }
 
     // REAL-TIME: If the data entry page is currently showing this class+subject, refresh it
     const dataForm = document.getElementById('dataClassSelect');
@@ -1274,6 +1286,7 @@ src="https://raw.githubusercontent.com/enitac/n/main/logo.png" class="logo" alt=
 <select id="lockSubjectSelect"></select>
 
 <button onclick="toggleSubjectLock()">Subject Score Entry Hidden/Unhidden</button>
+<button onclick="handleSaveConfig()" style="background: #28a745; margin-top: 10px;">Save</button>
 <p id="lockStatus" style="font-size:11px;color:#e74c3c;"></p>
 
 <hr style="margin: 20px 0; border: 1px solid #ccc;">
@@ -4867,6 +4880,7 @@ async function instantSaveGradeConfigToGitHub() {
             gradeKeys: currentConfig.gradeKeys,
             teachers: currentConfig.teachers || {},
             hiddenSubjects: currentConfig.hiddenSubjects || {},
+            locks: currentConfig.locks || {},
             passwordEnabled: currentConfig.passwordEnabled
         };
 
