@@ -194,15 +194,15 @@
   },
   "locks": {
     "form1": {
-      "Agriculture": true,
-      "Bible Knowledge": true,
-      "Chemistry": true,
-      "Biology": true,
-      "Chichewa": true,
-      "Computer Studies": true,
-      "English": true,
-      "French": true,
-      "Geography": true
+      "Agriculture": false,
+      "Bible Knowledge": false,
+      "Chemistry": false,
+      "Biology": false,
+      "Chichewa": false,
+      "Computer Studies": false,
+      "English": false,
+      "French": false,
+      "Geography": false
     }
   },
   "passwordEnabled": true
