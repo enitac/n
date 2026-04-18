@@ -201,8 +201,9 @@
       "Chichewa": false,
       "Computer Studies": false,
       "English": false,
-      "French": false,
-      "Geography": false
+      "French": true,
+      "Geography": false,
+      "Home Economics": true
     }
   },
   "passwordEnabled": true
