@@ -1116,7 +1116,7 @@ src="https://raw.githubusercontent.com/enitac/n/main/logo.png" class="logo" alt=
                         <th style="border:1px solid #cc6600;padding:10px;">Exam Number</th>
                         <th style="border:1px solid #cc6600;padding:10px;">Name</th>
                         <th style="border:1px solid #cc6600;padding:10px;width:40px;">SEX</th>
-                        <th style="border:1px solid #cc6600;padding:10px;width:30px;">SNE<br><span style="font-weight:normal;font-size:0.8em;">(SN)</span></th>
+                        <th id="sneColumnHeader" style="border:1px solid #cc6600;padding:10px;width:30px;">SNE<br><span style="font-weight:normal;font-size:0.8em;">(SN)</span></th>
                         <th style="border:1px solid #cc6600;padding:10px;">Score</th>
                     </tr>
                 </thead>
@@ -1309,6 +1309,56 @@ src="https://raw.githubusercontent.com/enitac/n/main/logo.png" class="logo" alt=
 <p style="font-size:0.9em; color:#7f8c8d; margin-bottom:10px;">Enable or disable password requirement on the exam portal front page.</p>
 <button onclick="togglePasswordAccess()" id="passwordAccessBtn">Toggle Password Access</button>
 <p id="passwordAccessStatus" style="font-size:11px; color:#2ecc71;"></p>
+
+<hr style="margin: 20px 0; border: 1px solid #ccc;">
+<h3>SNE Column Visibility (Data Entry)</h3>
+<p style="font-size:0.9em; color:#7f8c8d; margin-bottom:10px;">Control whether the SNE column appears in the Data Entry scoring panel. This setting persists until you change it.</p>
+<div style="margin-top:10px; display:flex; align-items:center; justify-content:center; gap:10px;">
+    <input type="checkbox" id="sneVisibilityCheckbox" onchange="toggleSNEVisibility()" style="width:20px; height:20px; margin:0;">
+    <label for="sneVisibilityCheckbox" style="margin:0; font-weight:bold;">Show SNE Column in Data Entry</label>
+</div>
+<p id="sneVisibilityStatus" style="font-size:11px; color:#2ecc71;"></p>
+<button onclick="handleSaveSNEConfig()" style="background:#28a745;">Save SNE Visibility</button>
+
+<hr style="margin: 20px 0; border: 1px solid #ccc;">
+<h3>Delete Student from List</h3>
+<p style="font-size:0.9em; color:#7f8c8d; margin-bottom:10px;">Remove a student from a class list. Choose to delete without replacement or replace with a new student.</p>
+
+<label for="deleteStudentClassSelect">Select Class:</label>
+<select id="deleteStudentClassSelect" onchange="populateDeleteStudentDropdown()">
+    <option value="">-- Select Class --</option>
+    <option value="form1">Form 1</option>
+    <option value="form2">Form 2</option>
+    <option value="form3">Form 3</option>
+    <option value="form4">Form 4</option>
+</select>
+
+<label for="deleteStudentSelect">Select Student:</label>
+<select id="deleteStudentSelect" style="text-align:left;">
+    <option value="">-- Select Student --</option>
+</select>
+
+<label for="deleteModeSelect">Delete Mode:</label>
+<select id="deleteModeSelect" onchange="toggleReplacementFields()">
+    <option value="without">Without Replacement (Remove Student)</option>
+    <option value="with">With Replacement (Replace Student)</option>
+</select>
+
+<div id="replacementFields" style="display:none;">
+    <label for="replacementName">Replacement Student Name:</label>
+    <input type="text" id="replacementName" placeholder="Full Name of New Student">
+    <label for="replacementExamNo">Replacement Exam Number:</label>
+    <input type="text" id="replacementExamNo" placeholder="e.g. J048 or M048">
+    <label for="replacementSex">Replacement Sex (M/F):</label>
+    <input type="text" id="replacementSex" placeholder="M or F">
+    <label for="replacementDOB">Replacement Date of Birth:</label>
+    <input type="text" id="replacementDOB" placeholder="e.g. 2005-12-01">
+</div>
+
+<div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
+    <button onclick="deleteStudentFromList()" class="small-btn" style="background:#e74c3c; max-width:200px; margin-top:10px;">Delete Student</button>
+</div>
+<p id="deleteStudentStatus" style="font-size:11px; color:#e74c3c;"></p>
 
 <hr style="margin: 20px 0; border: 1px solid #ccc;">
 <h3>ARCHIVE SECTION</h3>
@@ -1758,7 +1808,8 @@ function getDefaultConfig() {
         gradeKeys: gradeKeys,
         teachers: teachers,
         hiddenSubjects: hiddenSubjects,
-        passwordEnabled: true
+        passwordEnabled: true,
+        sneColumnVisible: true
     };
 }
 
@@ -2313,7 +2364,8 @@ async function handleSaveConfig() {
         teachers: {},
         hiddenSubjects: currentConfig.hiddenSubjects || {},
         locks: currentConfig.locks || {},
-        passwordEnabled: currentConfig.passwordEnabled
+        passwordEnabled: currentConfig.passwordEnabled,
+        sneColumnVisible: currentConfig.sneColumnVisible !== undefined ? currentConfig.sneColumnVisible : true
     };
 
     ALL_CLASSES.forEach(form => {
@@ -2724,6 +2776,7 @@ async function openUploadsAuth() {
     populateGradeEditors();
     populateClearSubjectSelect();
     updatePasswordAccessStatus();
+    initSNEVisibilityUI();
     goToPage('uploadsPage');
 }
 
@@ -4296,20 +4349,21 @@ async function showStudentMarksList() {
         const val = s[subject] || '';
         
         const snVal = s["SN"] || '';
+        const sneVisible = currentConfig && currentConfig.sneColumnVisible !== false;
         const row = document.createElement('tr');
         const inputDisabled = isLocked ? 'readonly style="width:80px;padding:6px;text-align:center;border:1px solid #e74c3c;border-radius:4px;background:#f5f5f5;color:#999;"' : 'oninput="updateStudentScore(\'' + form + '\', ' + i + ', \'' + subject + '\', this.value)" style="width:80px;padding:6px;text-align:center;border:1px solid #cc6600;border-radius:4px;"';
         row.innerHTML = `
             <td style="border:1px solid #cc6600;padding:8px;text-align:center;">${examNo}</td>
             <td style="border:1px solid #cc6600;padding:8px;text-align:left;">${name}</td>
             <td style="border:1px solid #cc6600;padding:8px;text-align:center;width:40px;">${sex}</td>
-            <td style="border:1px solid #cc6600;padding:8px;text-align:center;width:30px;">
+            ${sneVisible ? `<td style="border:1px solid #cc6600;padding:8px;text-align:center;width:30px;">
                 <input type="text" 
                        id="sn_${i}" 
                        value="${snVal}" 
                        oninput="updateStudentSN('${form}', ${i}, this.value)"
                        style="width:35px;padding:4px;text-align:center;border:1px solid #cc6600;border-radius:4px;font-size:0.85em;"
                        placeholder=" ">
-            </td>
+            </td>` : ''}
             <td style="border:1px solid #cc6600;padding:8px;text-align:center;">
                 <input type="text" 
                        id="score_${i}" 
@@ -4337,6 +4391,9 @@ async function showStudentMarksList() {
         }
         lockIndicator.style.display = 'block';
     }
+
+    // Apply SNE column visibility to header
+    applySNEColumnToTable();
 }
 
 function updateStudentScore(form, index, subject, value) {
@@ -4372,6 +4429,186 @@ function filterStudentMarks(){
     const rows = document.getElementById('dataEntryTableBody').getElementsByTagName('tr');
     for (let row of rows) {
         row.style.display = row.innerText.toLowerCase().includes(searchText) ? '' : 'none';
+    }
+}
+
+// --- SNE COLUMN VISIBILITY FUNCTIONS ---
+function toggleSNEVisibility() {
+    const checkbox = document.getElementById('sneVisibilityCheckbox');
+    if (!currentConfig) return;
+    currentConfig.sneColumnVisible = checkbox.checked;
+    updateSNEVisibilityStatus();
+}
+
+function updateSNEVisibilityStatus() {
+    const status = document.getElementById('sneVisibilityStatus');
+    if (!status || !currentConfig) return;
+    if (currentConfig.sneColumnVisible !== false) {
+        status.textContent = 'SNE column is currently VISIBLE.';
+        status.style.color = '#2ecc71';
+    } else {
+        status.textContent = 'SNE column is currently INVISIBLE.';
+        status.style.color = '#e74c3c';
+    }
+}
+
+function initSNEVisibilityUI() {
+    const checkbox = document.getElementById('sneVisibilityCheckbox');
+    if (!checkbox || !currentConfig) return;
+    checkbox.checked = currentConfig.sneColumnVisible !== false;
+    updateSNEVisibilityStatus();
+}
+
+function applySNEColumnToTable() {
+    const header = document.getElementById('sneColumnHeader');
+    if (!header) return;
+    const visible = currentConfig && currentConfig.sneColumnVisible !== false;
+    header.style.display = visible ? '' : 'none';
+}
+
+async function handleSaveSNEConfig() {
+    if (!currentConfig) {
+        alert('Configuration not loaded. Please enter Authorization Code.');
+        return;
+    }
+    const checkbox = document.getElementById('sneVisibilityCheckbox');
+    currentConfig.sneColumnVisible = checkbox.checked;
+    await handleSaveConfig();
+    updateSNEVisibilityStatus();
+    // Immediately refresh data entry table if visible
+    const form = document.getElementById('dataClassSelect');
+    const subject = document.getElementById('dataSubjectSelect');
+    if (form && subject && form.value && subject.value) {
+        showStudentMarksList();
+    }
+}
+
+// --- DELETE STUDENT FUNCTIONS ---
+function toggleReplacementFields() {
+    const mode = document.getElementById('deleteModeSelect').value;
+    const fields = document.getElementById('replacementFields');
+    fields.style.display = mode === 'with' ? 'block' : 'none';
+}
+
+async function populateDeleteStudentDropdown() {
+    const form = document.getElementById('deleteStudentClassSelect').value;
+    const sel = document.getElementById('deleteStudentSelect');
+    sel.innerHTML = '<option value="">-- Select Student --</option>';
+    if (!form) return;
+
+    const token = document.getElementById('githubToken').value;
+    const students = await fetchClassData(form);
+    if (!students || students.length === 0) return;
+
+    students.forEach((s, i) => {
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = (s["Exam Number"] || '') + ' - ' + (s["STUDENT'S NAME"] || '');
+        sel.appendChild(opt);
+    });
+}
+
+async function deleteStudentFromList() {
+    const token = document.getElementById('githubToken').value;
+    const form = document.getElementById('deleteStudentClassSelect').value;
+    const studentIndex = document.getElementById('deleteStudentSelect').value;
+    const mode = document.getElementById('deleteModeSelect').value;
+    const statusEl = document.getElementById('deleteStudentStatus');
+
+    if (!token) { alert('Authorization Code required.'); return; }
+    if (form === '') { alert('Please select a Class.'); return; }
+    if (studentIndex === '') { alert('Please select a Student.'); return; }
+
+    const idx = parseInt(studentIndex);
+    const classData = await fetchClassData(form);
+    if (!classData || classData.length === 0) { alert('No student data found.'); return; }
+
+    const studentName = classData[idx]["STUDENT'S NAME"] || '';
+    const studentExamNo = classData[idx]["Exam Number"] || '';
+
+    if (mode === 'with') {
+        const replName = document.getElementById('replacementName').value.trim();
+        const replExamNo = document.getElementById('replacementExamNo').value.trim().toUpperCase();
+        const replSex = document.getElementById('replacementSex').value.trim().toUpperCase();
+        const replDOB = document.getElementById('replacementDOB').value.trim();
+
+        if (!replName || !replExamNo) {
+            alert('Replacement Name and Exam Number are required.');
+            return;
+        }
+
+        // Check replacement exam number doesn't already exist (unless same as deleted)
+        if (replExamNo !== studentExamNo && classData.some(s => s["Exam Number"] === replExamNo)) {
+            alert('A student with this Replacement Exam Number already exists.');
+            return;
+        }
+
+        if (!confirm(`Replace "${studentName}" (${studentExamNo}) with "${replName}" (${replExamNo})?`)) return;
+
+        // Create replacement student keeping same position
+        const newStudent = {};
+        ALL_HEADERS.forEach(header => {
+            if (header === "STUDENT'S NAME") newStudent[header] = replName;
+            else if (header === "Exam Number") newStudent[header] = replExamNo;
+            else if (header === "Sex") newStudent[header] = replSex || '-';
+            else if (header === "Date of Birth") newStudent[header] = replDOB || '-';
+            else newStudent[header] = '-';
+        });
+        classData[idx] = newStudent;
+    } else {
+        if (!confirm(`Are you sure you want to permanently delete "${studentName}" (${studentExamNo}) from ${form.toUpperCase()}?`)) return;
+        classData.splice(idx, 1);
+    }
+
+    currentClassData[form] = classData;
+
+    showLoading();
+    updateLoadingPercent(10);
+
+    try {
+        const fileName = `${form}.csv`;
+        const currentSha = await getCSVFileSha(form, token);
+        updateLoadingPercent(50);
+
+        const csvString = Papa.unparse(classData, { header: true, columns: ALL_HEADERS });
+        const base64Content = btoa(unescape(encodeURIComponent(csvString)));
+        const commitMessage = mode === 'with'
+            ? `Replaced student ${studentExamNo} with ${document.getElementById('replacementExamNo').value.trim().toUpperCase()} in ${form}`
+            : `Deleted student ${studentExamNo} from ${form}`;
+
+        const result = await commitFile(fileName, commitMessage, base64Content, currentSha, token, 'PUT');
+
+        hideLoading();
+        if (result) {
+            currentDataSha[form] = result.content.sha;
+            statusEl.textContent = mode === 'with'
+                ? `Success! "${studentName}" replaced with "${document.getElementById('replacementName').value.trim()}" in ${form.toUpperCase()}.`
+                : `Success! "${studentName}" (${studentExamNo}) deleted from ${form.toUpperCase()}.`;
+            statusEl.style.color = '#2ecc71';
+
+            // Refresh dropdown
+            populateDeleteStudentDropdown();
+
+            // Clear replacement fields
+            if (mode === 'with') {
+                document.getElementById('replacementName').value = '';
+                document.getElementById('replacementExamNo').value = '';
+                document.getElementById('replacementSex').value = '';
+                document.getElementById('replacementDOB').value = '';
+            }
+
+            // Refresh data entry if showing this class
+            const dataForm = document.getElementById('dataClassSelect');
+            const dataSubject = document.getElementById('dataSubjectSelect');
+            if (dataForm && dataSubject && dataForm.value === form && dataSubject.value) {
+                showStudentMarksList();
+            }
+        }
+    } catch (error) {
+        hideLoading();
+        console.error('Delete student failed:', error);
+        statusEl.textContent = `Failed: ${safeMsg(error)}`;
+        statusEl.style.color = '#e74c3c';
     }
 }
 function filterScoreSheet(){
