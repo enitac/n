@@ -3492,6 +3492,18 @@ async function loadResults(isStudentPortal) {
 
         const sortedSubjects = [...ALL_SUBJECTS].sort();
 
+        // --- SURGICAL FIX: Check if student wrote any subjects ---
+        let studentWroteAny = false;
+        sortedSubjects.forEach(subject => {
+            if (currentConfig && currentConfig.hiddenSubjects && currentConfig.hiddenSubjects[form] && currentConfig.hiddenSubjects[form][subject]) {
+                return;
+            }
+            const rawScore = student[subject];
+            if (rawScore !== undefined && rawScore !== null && rawScore.toString().trim() !== '') {
+                studentWroteAny = true;
+            }
+        });
+
         sortedSubjects.forEach(subject => {
             // --- SURGICAL FIX: Skip hidden subjects ---
             if (currentConfig && currentConfig.hiddenSubjects && currentConfig.hiddenSubjects[form] && currentConfig.hiddenSubjects[form][subject]) {
@@ -3499,24 +3511,25 @@ async function loadResults(isStudentPortal) {
             }
 
             const rawScore = student[subject];
-            let displayScore = '-';
-            let grade = '-';
-            let remark = '-';
+            let hasScore = rawScore !== undefined && rawScore !== null && rawScore.toString().trim() !== '';
+            let displayScore = '';
+            let grade = '';
+            let remark = '';
 
-            if (rawScore !== undefined && rawScore !== null && rawScore.toString().trim() !== '') {
+            if (hasScore) {
                 displayScore = rawScore;
                 const gr = getGradeAndRemark(form, rawScore);
                 grade = gr.grade;
                 remark = gr.remark;
             }
 
-            const teacher = currentConfig.teachers[form][subject] || DEFAULT_TEACHER;
+            const teacher = hasScore ? (currentConfig.teachers[form][subject] || DEFAULT_TEACHER) : '';
 
             const posMap = computeSubjectPositions(form, subject, data);
-            const subjectPos = posMap[studentNumber] || '-';
+            const subjectPos = hasScore ? (posMap[studentNumber] || '') : '';
 
             if (form === 'form1' || form === 'form2') {
-                remark = lowerFormRemarkFromGrade(grade);
+                remark = hasScore ? lowerFormRemarkFromGrade(grade) : '';
             }
 
             const row = reportBody.insertRow();
@@ -3577,9 +3590,14 @@ async function loadResults(isStudentPortal) {
         const statusVal = computeFinalRemark(form, student);
         document.getElementById('reportStatus').textContent = statusVal;
 
-        // Auto-generate comments
-        document.getElementById('reportTeacherComment').textContent = generateTeacherComment(form, student, studentMetrics.average, 0, ALL_SUBJECTS.length);
-        document.getElementById('reportHeadComment').textContent = generateHeadComment(form, student, studentMetrics.average, 0, ALL_SUBJECTS.length, positionNum, totalRankableStudents);
+        // Auto-generate comments (blank if student wrote no subjects)
+        if (studentWroteAny) {
+            document.getElementById('reportTeacherComment').textContent = generateTeacherComment(form, student, studentMetrics.average, 0, ALL_SUBJECTS.length);
+            document.getElementById('reportHeadComment').textContent = generateHeadComment(form, student, studentMetrics.average, 0, ALL_SUBJECTS.length, positionNum, totalRankableStudents);
+        } else {
+            document.getElementById('reportTeacherComment').textContent = '';
+            document.getElementById('reportHeadComment').textContent = '';
+        }
 
         // Next term opens and fees from config
         document.getElementById('reportNextTerm').textContent = currentConfig.nextTermOpens || '-';
@@ -4723,6 +4741,18 @@ async function generateAllProgressReports() {
         const reportBody = document.getElementById('reportBody');
         reportBody.innerHTML = '';
 
+        // --- SURGICAL FIX: Check if student wrote any subjects ---
+        let studentWroteAny = false;
+        [...ALL_SUBJECTS].sort().forEach(subject => {
+            if (currentConfig && currentConfig.hiddenSubjects && currentConfig.hiddenSubjects[form] && currentConfig.hiddenSubjects[form][subject]) {
+                return;
+            }
+            const rawScore = student[subject];
+            if (rawScore !== undefined && rawScore !== null && rawScore.toString().trim() !== '') {
+                studentWroteAny = true;
+            }
+        });
+
         [...ALL_SUBJECTS].sort().forEach(subject => {
             // --- SURGICAL FIX: Skip hidden subjects ---
             if (currentConfig && currentConfig.hiddenSubjects && currentConfig.hiddenSubjects[form] && currentConfig.hiddenSubjects[form][subject]) {
@@ -4730,14 +4760,15 @@ async function generateAllProgressReports() {
             }
 
             const rawScore = student[subject];
-            const gr = getGradeAndRemark(form, rawScore);
-            const pos = subjectPositions[subject][studentNumber] || '-';
-            const teacher = currentConfig.teachers[form][subject] || DEFAULT_TEACHER;
-            const remark = (form === 'form1' || form === 'form2') ? lowerFormRemarkFromGrade(gr.grade) : gr.remark;
+            let hasScore = rawScore !== undefined && rawScore !== null && rawScore.toString().trim() !== '';
+            const gr = hasScore ? getGradeAndRemark(form, rawScore) : { grade: '', remark: '' };
+            const pos = hasScore ? (subjectPositions[subject][studentNumber] || '') : '';
+            const teacher = hasScore ? (currentConfig.teachers[form][subject] || DEFAULT_TEACHER) : '';
+            const remark = hasScore ? ((form === 'form1' || form === 'form2') ? lowerFormRemarkFromGrade(gr.grade) : gr.remark) : '';
 
             const row = reportBody.insertRow();
             row.insertCell().textContent = subject;
-            row.insertCell().textContent = rawScore || '-';
+            row.insertCell().textContent = hasScore ? rawScore : '';
             row.insertCell().textContent = gr.grade;
             row.insertCell().textContent = pos;
             row.insertCell().textContent = remark;
@@ -4792,9 +4823,14 @@ async function generateAllProgressReports() {
         document.getElementById('reportTotalStudents').textContent = totalRankable;
         document.getElementById('reportStatus').textContent = computeFinalRemark(form, student);
 
-        // Auto-generate comments
-        document.getElementById('reportTeacherComment').textContent = generateTeacherComment(form, student, metrics.average, 0, ALL_SUBJECTS.length);
-        document.getElementById('reportHeadComment').textContent = generateHeadComment(form, student, metrics.average, 0, ALL_SUBJECTS.length, positionNum, totalRankable);
+        // Auto-generate comments (blank if student wrote no subjects)
+        if (studentWroteAny) {
+            document.getElementById('reportTeacherComment').textContent = generateTeacherComment(form, student, metrics.average, 0, ALL_SUBJECTS.length);
+            document.getElementById('reportHeadComment').textContent = generateHeadComment(form, student, metrics.average, 0, ALL_SUBJECTS.length, positionNum, totalRankable);
+        } else {
+            document.getElementById('reportTeacherComment').textContent = '';
+            document.getElementById('reportHeadComment').textContent = '';
+        }
 
         // Next term opens and fees from config
         document.getElementById('reportNextTerm').textContent = currentConfig.nextTermOpens || '-';
