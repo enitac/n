@@ -225,6 +225,6 @@
       "Chichewa": false
     }
   },
-  "passwordEnabled": true,
+  "passwordEnabled": false,
   "sneColumnVisible": false
 }
