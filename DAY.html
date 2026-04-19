@@ -646,6 +646,12 @@ function saveSelectedSubjectsToRepo() {
         overflow: visible !important;
     }
 
+    /* SURGICAL FIX: Remove scrollbar from table-wrapper inside progress/brief reports */
+    #progressReport .table-wrapper,
+    #briefReport .table-wrapper {
+        overflow: visible !important;
+    }
+
     /* Make table compact */
     #resultsTable th,
     #resultsTable td {
