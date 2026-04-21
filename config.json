@@ -207,7 +207,7 @@
     },
     "form4": {
       "Agriculture": true,
-      "Bible Knowledge": true,
+      "Bible Knowledge": false,
       "Biology": true,
       "Chemistry": true,
       "Chichewa": true,
