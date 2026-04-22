@@ -222,7 +222,8 @@
       "Computer Studies": true
     },
     "form2": {
-      "Chichewa": false
+      "Chichewa": false,
+      "Agriculture": false
     }
   },
   "passwordEnabled": true,
