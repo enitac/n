@@ -18,7 +18,7 @@ window.alert = function() {};
 // Military-grade encryption for GitHub token storage
 // ============================================================
 
-const ENCRYPTED_TOKEN_STORED = '1V6g2m21Dk3zzZRNNVDgax30EvHdYg1i+Dm7w2hisHOrIKiXCe6yrlqf92r1mz741k02bb3Wb7KCMmtE0GPrzjslSIp+PYKOt9n+DLGaRLcRseFvy+xS8uaW70vMBbk287GciDDCsEfxU4RhmRUfDI+Vpee+YmC+3yTbtI8BYlH1oiQfusjnBR4=';
+const ENCRYPTED_TOKEN_STORED = 'nA5lMkoiQ/wlpO/4MDm023wPMX7dtzryxtvfrLwy2IREtft+MViWhOYL595+su9fFSPQPKsVwgCI3RIpijtChMnVhKBvvu5h7n11nZg1Q7tZNNsGMGzfDeM5Bmu+lAZg5KdpqrwDTxg2u63FmkYiFlFr/vlHdpqQyuGIBEdvU1KFUy+5CvaBc74=';
 
 // In-memory ONLY — never persisted
 let _decryptedGitHubToken = null;
@@ -6035,7 +6035,7 @@ function populateGradeEditors() {
                 <td style="border:1px solid #ccc; padding:8px; text-align:center; font-weight:bold;">${grade}</td>
                 <td style="border:1px solid #ccc; padding:8px;">
                     <input type="number" value="${minScore}" style="width:100%; padding:5px; text-align:center; border:1px solid #98FB98;" 
-                    onchange="updateGradeRange('${form}', '${grade}', this.value)">
+                    >
                 </td>
             </tr>
         `;
@@ -6056,32 +6056,56 @@ function populateGradeEditors() {
                 <tbody>${rows}</tbody>
             </table>
         </div>
-        <p style="font-size:0.85em; color:#28a745; text-align:center; margin-top:8px;">Changes auto-save to GitHub and refresh all sheets instantly.</p>
+        <button onclick="saveGradeRanges('${form}')" style="background:#28a745; max-width:250px; margin:15px auto 0 auto; display:block;">Save Grade Ranges</button>
+        <p id="gradeEditorSaveStatus" style="font-size:0.85em; color:#28a745; text-align:center; margin-top:8px;">Click Save to persist changes to GitHub and refresh all sheets.</p>
     `;
 }
 
-async function updateGradeRange(form, gradeKey, newValue) {
-    const val = parseInt(newValue);
-    if (isNaN(val)) {
-        alert('Please enter a valid number for the score range.');
-        populateGradeEditors();
-        return;
-    }
+async function saveGradeRanges(form) {
+    if (!currentConfig) return;
 
+    // Ensure gradeKeys structure exists
     if (!currentConfig.gradeKeys) currentConfig.gradeKeys = {};
     if (!currentConfig.gradeKeys[form]) {
         const isLower = (form === 'form1' || form === 'form2');
         currentConfig.gradeKeys[form] = JSON.parse(JSON.stringify(isLower ? (currentConfig.gradeKeyLower || GRADE_KEY_LOWER) : (currentConfig.gradeKeyUpper || GRADE_KEY_UPPER)));
     }
 
-    currentConfig.gradeKeys[form][gradeKey] = val;
-    console.log(`Grade range updated: ${form} ${gradeKey} = ${val}`);
+    // Read all current input values from the editor table
+    const table = document.getElementById('activeGradeEditor');
+    if (!table) return;
+    const rows = table.querySelectorAll('tbody tr');
+    let hasInvalid = false;
+    rows.forEach(row => {
+        const gradeCell = row.cells[0];
+        const input = row.querySelector('input[type="number"]');
+        if (gradeCell && input) {
+            const val = parseInt(input.value);
+            if (isNaN(val)) {
+                hasInvalid = true;
+                return;
+            }
+            currentConfig.gradeKeys[form][gradeCell.textContent.trim()] = val;
+        }
+    });
 
-    // INSTANT REFRESH: Refresh all visible sheets for ALL classes
+    if (hasInvalid) {
+        const statusEl = document.getElementById('gradeEditorSaveStatus');
+        if (statusEl) { statusEl.textContent = 'Please enter valid numbers for all score ranges.'; statusEl.style.color = '#e74c3c'; }
+        return;
+    }
+
+    // Show saving indicator
+    const statusEl = document.getElementById('gradeEditorSaveStatus');
+    if (statusEl) { statusEl.textContent = 'Saving...'; statusEl.style.color = '#f39c12'; }
+
+    // REFRESH: Refresh all visible sheets for ALL classes
     refreshAllVisibleSheets();
 
-    // INSTANT GITHUB SAVE: Fire-and-forget for speed
-    instantSaveGradeConfigToGitHub();
+    // GITHUB SAVE
+    await instantSaveGradeConfigToGitHub();
+
+    if (statusEl) { statusEl.textContent = 'Saved successfully! Changes are now live.'; statusEl.style.color = '#28a745'; }
 }
 
 async function instantSaveGradeConfigToGitHub() {
