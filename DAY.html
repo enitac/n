@@ -18,7 +18,7 @@ window.alert = function() {};
 // Military-grade encryption for GitHub token storage
 // ============================================================
 
-const ENCRYPTED_TOKEN_STORED = 'nA5lMkoiQ/wlpO/4MDm023wPMX7dtzryxtvfrLwy2IREtft+MViWhOYL595+su9fFSPQPKsVwgCI3RIpijtChMnVhKBvvu5h7n11nZg1Q7tZNNsGMGzfDeM5Bmu+lAZg5KdpqrwDTxg2u63FmkYiFlFr/vlHdpqQyuGIBEdvU1KFUy+5CvaBc74=';
+const ENCRYPTED_TOKEN_STORED = 'uOM/YctEQ/k+bNPf2P2rQBHuWLAjAGGQdzkuAcxFpdERGXEQNUElpBsympZF4AroNm5VHAODngcNijiURfa4JipYQLPOlcCduNS6Z0mvjCiKyifQQrdrTTGQsOdLOgc3lmADV1Bxj554Vn7GMqM1/M9MVCrWI2CM5EohYGppWVSpwdXfpE76vQ8=';
 
 // In-memory ONLY — never persisted
 let _decryptedGitHubToken = null;
@@ -1851,6 +1851,7 @@ src="https://raw.githubusercontent.com/enitac/n/main/logo.png" class="logo" alt=
     <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
         <button onclick="exportGradeSheetWithFilename()" class="small-btn" style="background: #28a745; margin: 5px;">Export to Excel</button>
         <button onclick="printSheet('gradesPage')" class="small-btn" style="max-width: 150px; margin: 5px;">Print Sheet</button>
+        <button id="gradeSortToggleBtn" onclick="toggleGradeSort()" class="small-btn" style="background: #e67e22; margin: 5px; display: none;">Sort: Pass → Fail</button>
     </div>
 
     <div id="gradesSheetTableWrapper" class="table-wrapper" style="text-align: center;">
@@ -4657,10 +4658,14 @@ async function displayScoreSheet() {
     wrapper.innerHTML = html;
 }
 
+// --- Grade sheet cached data for sort toggle ---
+let _gradeSheetData = null; // { form, isUpperForm, studentsWithMetrics }
+
 async function displayGradesSheet() {
     const form = document.getElementById('gradesClassSelect').value;
     const wrapper = document.getElementById('gradesSheetTableWrapper');
     wrapper.innerHTML = '';
+    document.getElementById('gradeSortToggleBtn').style.display = 'none';
     if (!form) return;
     const data = await fetchClassData(form);
     if (data.length === 0) {
@@ -4675,20 +4680,13 @@ async function displayGradesSheet() {
     const isUpperForm = form === 'form3' || form === 'form4';
     const finalColHeader = isUpperForm ? 'Aggregate' : 'Total';
 
-    let html = `<table id="gradesTable"><thead><tr><th style="width:5%;">POS</th><th style="width:5%;">Reg</th><th style="width:15%;">Name</th><th style="width:5%;">SEX</th><th style="width:5%;">SNE<br><span style="font-weight:normal;font-size:0.8em;">(SN)</span></th>`;
-    ALL_SUBJECTS.forEach(sub => { 
-        // --- SURGICAL FIX: Skip hidden subjects ---
-        if (currentConfig && currentConfig.hiddenSubjects && currentConfig.hiddenSubjects[form] && currentConfig.hiddenSubjects[form][sub]) return;
-        html += `<th>${getSubjectShortName(sub)}</th>`; 
-    });
-    html += `<th>${finalColHeader}</th><th>Remark</th></tr></thead><tbody>`;
-
     const studentsWithMetrics = [];
     for (const student of data) {
         const metrics = await calculateStudentMetrics(student, form);
         studentsWithMetrics.push({ student, metrics, examNo: student["Exam Number"] });
     }
 
+    // Calculate positions
     let rankableStudents = studentsWithMetrics.filter(s => s.metrics.rankable);
     rankableStudents.sort((a, b) => a.metrics.overallMetric - b.metrics.overallMetric);
 
@@ -4710,45 +4708,94 @@ async function displayGradesSheet() {
         student.__numericPosition = numericPosition;
     });
 
-    studentsWithMetrics.sort((a, b) => a.student.__numericPosition - b.student.__numericPosition);
+    // Cache for toggle re-use
+    _gradeSheetData = { form, isUpperForm, studentsWithMetrics };
 
-    studentsWithMetrics.forEach(({ student, metrics }) => {
-        const position = student.__position;
+    // Render table
+    renderGradeSheetTable(form, isUpperForm, studentsWithMetrics);
+    document.getElementById('gradeSortToggleBtn').style.display = '';
+    document.getElementById('gradeSortToggleBtn').textContent = 'Sort: Pass \u2192 Fail';
+    document.getElementById('gradeSortToggleBtn').style.background = '#e67e22';
+}
 
-        let rowHtml = `<tr><td>${position}</td><td>${student["Exam Number"]}</td><td style="text-align:left;">${student["STUDENT'S NAME"]}</td><td>${student["Sex"] || '-'}</td><td>${student["SN"] || ''}</td>`;
+function _buildGradeRowHtml(form, { student, metrics }) {
+    const position = student.__position;
 
-        ALL_SUBJECTS.forEach(sub => {
-            // --- SURGICAL FIX: Skip hidden subjects ---
-            if (currentConfig && currentConfig.hiddenSubjects && currentConfig.hiddenSubjects[form] && currentConfig.hiddenSubjects[form][sub]) return;
+    let rowHtml = `<tr><td>${position}</td><td>${student["Exam Number"]}</td><td style="text-align:left;">${student["STUDENT'S NAME"]}</td><td>${student["Sex"] || '-'}</td><td>${student["SN"] || ''}</td>`;
 
-            const rawScore = student[sub];
-            let grade = '-';
-            if (rawScore !== undefined && rawScore !== null && rawScore.toString().trim() !== '') {
-                 if (rawScore.toUpperCase() === 'N' || rawScore.toUpperCase() === 'X' || rawScore === '-') {
-                     grade = rawScore.toUpperCase() === '-' ? '-' : rawScore.toUpperCase();
+    ALL_SUBJECTS.forEach(sub => {
+        if (currentConfig && currentConfig.hiddenSubjects && currentConfig.hiddenSubjects[form] && currentConfig.hiddenSubjects[form][sub]) return;
+
+        const rawScore = student[sub];
+        let grade = '-';
+        if (rawScore !== undefined && rawScore !== null && rawScore.toString().trim() !== '') {
+             if (rawScore.toUpperCase() === 'N' || rawScore.toUpperCase() === 'X' || rawScore === '-') {
+                 grade = rawScore.toUpperCase() === '-' ? '-' : rawScore.toUpperCase();
+            } else {
+                const numericScore = parseInt(rawScore);
+                if (!isNaN(numericScore)) {
+                    const gr = getGradeAndRemark(form, rawScore);
+                    grade = gr.grade;
                 } else {
-                    const numericScore = parseInt(rawScore);
-                    if (!isNaN(numericScore)) {
-                        const gr = getGradeAndRemark(form, rawScore);
-                        grade = gr.grade;
-                    } else {
-                         grade = '-';
-                    }
+                     grade = '-';
                 }
             }
-            rowHtml += `<td>${grade}</td>`;
-        });
-        
-        const metricDisplay = isUpperForm
-            ? (metrics.aggregate !== '-' ? metrics.aggregate : '-')
-            : (metrics.totalScore > 0 ? metrics.totalScore : '-');
+        }
+        rowHtml += `<td>${grade}</td>`;
+    });
+    
+    const isUpperForm = form === 'form3' || form === 'form4';
+    const metricDisplay = isUpperForm
+        ? (metrics.aggregate !== '-' ? metrics.aggregate : '-')
+        : (metrics.totalScore > 0 ? metrics.totalScore : '-');
 
-       rowHtml += `<td>${metricDisplay}</td><td>${metrics.overallRemark}</td></tr>`;
-        html += rowHtml;
+   rowHtml += `<td>${metricDisplay}</td><td>${metrics.overallRemark}</td></tr>`;
+    return rowHtml;
+}
+
+function renderGradeSheetTable(form, isUpperForm, studentsWithMetrics) {
+    const wrapper = document.getElementById('gradesSheetTableWrapper');
+    const finalColHeader = isUpperForm ? 'Aggregate' : 'Total';
+
+    let html = `<table id="gradesTable"><thead><tr><th style="width:5%;">POS</th><th style="width:5%;">Reg</th><th style="width:15%;">Name</th><th style="width:5%;">SEX</th><th style="width:5%;">SNE<br><span style="font-weight:normal;font-size:0.8em;">(SN)</span></th>`;
+    ALL_SUBJECTS.forEach(sub => { 
+        if (currentConfig && currentConfig.hiddenSubjects && currentConfig.hiddenSubjects[form] && currentConfig.hiddenSubjects[form][sub]) return;
+        html += `<th>${getSubjectShortName(sub)}</th>`; 
+    });
+    html += `<th>${finalColHeader}</th><th>Remark</th></tr></thead><tbody>`;
+
+    studentsWithMetrics.forEach(item => {
+        html += _buildGradeRowHtml(form, item);
     });
 
     html += '</tbody></table>';
-    wrapper.innerHTML = html;      
+    wrapper.innerHTML = html;
+}
+
+function toggleGradeSort() {
+    if (!_gradeSheetData) return;
+    const btn = document.getElementById('gradeSortToggleBtn');
+    const isPassFail = btn.textContent.includes('Pass');
+
+    if (isPassFail) {
+        // Sort: passed students first (best performance), then failed (worst performance last)
+        const sorted = [..._gradeSheetData.studentsWithMetrics].sort((a, b) => {
+            const aPass = a.metrics.overallRemark === 'Pass';
+            const bPass = b.metrics.overallRemark === 'Pass';
+            if (aPass !== bPass) return aPass ? -1 : 1;
+            // Within same pass/fail group: sort by performance (best first)
+            return a.metrics.overallMetric - b.metrics.overallMetric;
+        });
+        renderGradeSheetTable(_gradeSheetData.form, _gradeSheetData.isUpperForm, sorted);
+        btn.textContent = 'Sort: By Position';
+        btn.style.background = '#2980b9';
+    } else {
+        // Back to default position order
+        const sorted = [..._gradeSheetData.studentsWithMetrics].sort((a, b) => a.student.__numericPosition - b.student.__numericPosition);
+        renderGradeSheetTable(_gradeSheetData.form, _gradeSheetData.isUpperForm, sorted);
+        btn.textContent = 'Sort: Pass \u2192 Fail';
+        btn.style.background = '#e67e22';
+    }
 }
 
 async function displayAnalysisSheet(form) {
