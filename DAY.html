@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Chimteka Secondary Portal</title>
+  <title>Namitete Secondary Portal</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -12,6 +12,87 @@
 <script>
 // --- SURGICAL FIX: Disable all alert() popups globally ---
 window.alert = function() {};
+
+// ============================================================
+// AES-256-GCM TOKEN ENCRYPTION SYSTEM
+// Military-grade encryption for GitHub token storage
+// ============================================================
+
+const ENCRYPTED_TOKEN_STORED = '1V6g2m21Dk3zzZRNNVDgax30EvHdYg1i+Dm7w2hisHOrIKiXCe6yrlqf92r1mz741k02bb3Wb7KCMmtE0GPrzjslSIp+PYKOt9n+DLGaRLcRseFvy+xS8uaW70vMBbk287GciDDCsEfxU4RhmRUfDI+Vpee+YmC+3yTbtI8BYlH1oiQfusjnBR4=';
+
+// In-memory ONLY — never persisted
+let _decryptedGitHubToken = null;
+let _sessionEncryptedToken = null; // Set by setup wizard for current session
+
+function getDecryptedToken() {
+    return _decryptedGitHubToken;
+}
+
+// Derive AES-256-GCM key from password using PBKDF2
+async function deriveKey(password, salt) {
+    const enc = new TextEncoder();
+    const keyMaterial = await crypto.subtle.importKey(
+        'raw',
+        enc.encode(password),
+        'PBKDF2',
+        false,
+        ['deriveKey']
+    );
+    return crypto.subtle.deriveKey(
+        {
+            name: 'PBKDF2',
+            salt: salt,
+            iterations: 600000,
+            hash: 'SHA-256'
+        },
+        keyMaterial,
+        { name: 'AES-GCM', length: 256 },
+        false,
+        ['encrypt', 'decrypt']
+    );
+}
+
+// Encrypt a token with a password → base64 string (salt + iv + ciphertext)
+async function encryptToken(plainToken, password) {
+    const enc = new TextEncoder();
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const key = await deriveKey(password, salt);
+    const ciphertext = await crypto.subtle.encrypt(
+        { name: 'AES-GCM', iv: iv },
+        key,
+        enc.encode(plainToken)
+    );
+    // Concatenate: salt(16) + iv(12) + ciphertext
+    const combined = new Uint8Array(salt.length + iv.length + ciphertext.byteLength);
+    combined.set(salt, 0);
+    combined.set(iv, salt.length);
+    combined.set(new Uint8Array(ciphertext), salt.length + iv.length);
+    // Return base64
+    return btoa(String.fromCharCode.apply(null, combined));
+}
+
+// Decrypt base64 string → original token using password
+async function decryptToken(encryptedBase64, password) {
+    const combined = Uint8Array.from(atob(encryptedBase64), c => c.charCodeAt(0));
+    const salt = combined.slice(0, 16);
+    const iv = combined.slice(16, 28);
+    const ciphertext = combined.slice(28);
+    const key = await deriveKey(password, salt);
+    const decrypted = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: iv },
+        key,
+        ciphertext
+    );
+    return new TextDecoder().decode(decrypted);
+}
+
+// Check if encrypted token has been set up
+function isTokenSetup() {
+    return ENCRYPTED_TOKEN_STORED !== '__ENCRYPTED_TOKEN_HERE__' || _sessionEncryptedToken !== null;
+}
+
+// ============================================================
 
 // --- FRONT PAGE POPUP (only for initialPage, other pages unaffected) ---
 function showFrontPagePopup(msg) {
@@ -221,7 +302,7 @@ function saveScoresAsExcel() {
 function saveSelectedSubjectsToRepo() {
     const form = document.getElementById('dataClassSelect').value;
     const subject = document.getElementById('dataSubjectSelect').value;
-    const token = document.getElementById('githubToken').value;
+    const token = getDecryptedToken();
     
     if (!form) {
         alert('Please select a Class first.');
@@ -497,8 +578,18 @@ function saveSelectedSubjectsToRepo() {
         box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
         margin: 20px auto;
         border: 3px double black;
+        border-radius: 12px;
         outline: 3px double black;
         outline-offset: 3px;
+    }
+
+    /* On-screen batch print clone: rounded frame */
+    .progressReportClone {
+        background-color: white;
+        color: black;
+        border: 3px double black;
+        border-radius: 12px;
+        box-shadow: 0 0 0 3px black, 0 6px 20px rgba(0, 0, 0, 0.1);
     }
 
     #reportDetails div { color: black; }
@@ -703,15 +794,15 @@ function saveSelectedSubjectsToRepo() {
         #briefReport[style*="block"] {
             visibility: visible !important;
             position: absolute !important;
-            left: 1cm !important;
-            right: 1cm !important;
-            top: 2cm !important;
-            bottom: 1cm !important;
+            left: 0 !important;
+            right: 0 !important;
+            top: 0 !important;
+            bottom: 0 !important;
             display: flex !important;
             flex-direction: column !important;
-            width: calc(100% - 2cm) !important;
+            width: 100% !important;
             max-width: none !important;
-            min-height: calc(100% - 3cm) !important;
+            min-height: 100% !important;
             height: auto !important;
             margin: 0 !important;
             padding: 15px !important;
@@ -754,7 +845,7 @@ function saveSelectedSubjectsToRepo() {
 
         @page { 
             size: A4 portrait; 
-            margin: 5mm !important;
+            margin: 2cm 1cm 1cm 1cm !important;
         }
 
         #progressReport, #briefReport {
@@ -765,12 +856,210 @@ function saveSelectedSubjectsToRepo() {
         #resultsTable th, #resultsTable td,
         #briefResultsTable th, #briefResultsTable td {
             padding: 3px 2px !important;
-            font-size: 8pt !important;
+            font-size: 9pt !important;
         }
 
         #reportDetails p, #briefReportDetails p {
             margin-bottom: 2px !important;
             font-size: 10pt !important;
+        }
+
+        #batchPrintArea {
+            visibility: visible !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            position: absolute !important;
+            left: 0 !important;
+            right: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            max-width: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: white !important;
+        }
+
+        #batchPrintArea * {
+            visibility: visible !important;
+        }
+
+        #batchPrintArea > .progressReportClone {
+            background-color: white !important;
+            color: black !important;
+            padding: 15px 15px 1cm 15px !important;
+            width: 100% !important;
+            max-width: 810px !important;
+            max-height: 297mm !important;
+            min-height: auto !important;
+            height: auto !important;
+            margin: 1.1cm auto 0 auto !important;
+            border: 3px double black !important;
+            border-radius: 12px !important;
+            box-shadow: 0 0 0 3px black !important;
+            page-break-after: always !important;
+            page-break-inside: avoid !important;
+            overflow: hidden !important;
+        }
+
+        #batchPrintArea > .progressReportClone:last-child {
+            page-break-after: auto !important;
+        }
+
+        #batchPrintArea > .progressReportClone {
+            transform-origin: top center !important;
+        }
+
+        #batchPrintArea .back-btn,
+        #batchPrintArea button,
+        #batchPrintArea select,
+        #batchPrintArea label,
+        #batchPrintArea input,
+        #batchPrintArea textarea {
+            display: none !important;
+        }
+
+        #batchPrintArea .table-wrapper {
+            overflow: visible !important;
+            width: 100% !important;
+        }
+
+        /* SURGICAL FIX: Make results table fill full width with SUBJECT, REMARKS, TEACHER equal width */
+        #batchPrintArea table#resultsTable,
+        #batchPrintArea .progressReportClone table {
+            width: 100% !important;
+            table-layout: fixed !important;
+        }
+        #batchPrintArea table#resultsTable th:nth-child(1),
+        #batchPrintArea table#resultsTable td:nth-child(1),
+        #batchPrintArea .progressReportClone table th:nth-child(1),
+        #batchPrintArea .progressReportClone table td:nth-child(1) {
+            width: 27% !important;
+        }
+        #batchPrintArea table#resultsTable th:nth-child(5),
+        #batchPrintArea table#resultsTable td:nth-child(5),
+        #batchPrintArea .progressReportClone table th:nth-child(5),
+        #batchPrintArea .progressReportClone table td:nth-child(5) {
+            width: 24% !important;
+        }
+        #batchPrintArea table#resultsTable th:nth-child(6),
+        #batchPrintArea table#resultsTable td:nth-child(6),
+        #batchPrintArea .progressReportClone table th:nth-child(6),
+        #batchPrintArea .progressReportClone table td:nth-child(6) {
+            width: 27% !important;
+        }
+        #batchPrintArea table#resultsTable th:nth-child(2),
+        #batchPrintArea table#resultsTable td:nth-child(2),
+        #batchPrintArea .progressReportClone table th:nth-child(2),
+        #batchPrintArea .progressReportClone table td:nth-child(2),
+        #batchPrintArea table#resultsTable th:nth-child(3),
+        #batchPrintArea table#resultsTable td:nth-child(3),
+        #batchPrintArea .progressReportClone table th:nth-child(3),
+        #batchPrintArea .progressReportClone table td:nth-child(3) {
+            width: 6.33% !important;
+        }
+        #batchPrintArea table#resultsTable th:nth-child(4),
+        #batchPrintArea table#resultsTable td:nth-child(4),
+        #batchPrintArea .progressReportClone table th:nth-child(4),
+        #batchPrintArea .progressReportClone table td:nth-child(4) {
+            width: 9.33% !important;
+        }
+        /* SURGICAL FIX: No text cutting — allow wrapping */
+        #batchPrintArea table#resultsTable td,
+        #batchPrintArea table#resultsTable th,
+        #batchPrintArea .progressReportClone table td,
+        #batchPrintArea .progressReportClone table th {
+            white-space: normal !important;
+            overflow: visible !important;
+            text-overflow: clip !important;
+            word-wrap: break-word !important;
+        }
+
+        #batchPrintArea #reportHeader {
+            display: flex !important;
+            flex-direction: row !important;
+            align-items: flex-start !important;
+            justify-content: flex-start !important;
+            margin-bottom: 5px !important;
+            width: 100% !important;
+        }
+
+        #batchPrintArea #reportHeaderRight {
+            text-align: center !important;
+            flex: 1 !important;
+            margin-left: -15px !important;
+            font-size: 0.8em !important;
+            line-height: 1.4 !important;
+        }
+
+        #batchPrintArea #summaryAndKeyWrapper {
+            display: flex !important;
+            justify-content: space-between !important;
+            margin-top: 15px !important;
+            width: 100% !important;
+            text-align: left !important;
+        }
+
+        #batchPrintArea #reportSummary {
+            width: 100% !important;
+            text-align: left !important;
+        }
+
+        #batchPrintArea #gradeKeyPlaceholder {
+            width: 100% !important;
+            text-align: left !important;
+        }
+
+        #batchPrintArea #reportGradeKeyTable {
+            width: 50% !important;
+            table-layout: fixed !important;
+            border-collapse: collapse !important;
+            margin: 0 !important;
+        }
+
+        #batchPrintArea #reportGradeKeyTable th,
+        #batchPrintArea #reportGradeKeyTable td {
+            width: 25% !important;
+            text-align: center !important;
+        }
+
+        #batchPrintArea #gradeKeyTableNew {
+            margin-top: 5px !important;
+            width: 100% !important;
+            border-collapse: collapse !important;
+        }
+
+        #batchPrintArea #reportCommentsSection {
+            margin-top: 10px !important;
+            text-align: left !important;
+            width: 100% !important;
+        }
+
+        #batchPrintArea #reportGradeKeySection {
+            margin-top: 10px !important;
+            width: 100% !important;
+            text-align: left !important;
+        }
+
+        #batchPrintArea .logo {
+            max-width: 150px !important;
+            height: auto !important;
+            margin-bottom: 10px !important;
+        }
+
+        #batchPrintArea hr {
+            border-top: 2px solid black !important;
+            margin: 10px 0 !important;
+        }
+
+        #batchPrintArea .info-row {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            width: 100% !important;
+        }
+
+        #batchPrintArea .info-row span {
+            display: inline !important;
         }
     }
 
@@ -927,8 +1216,8 @@ function saveSelectedSubjectsToRepo() {
 </div>
 
 <div id="initialPage" class="page">
-    <img src="https://raw.githubusercontent.com/enitac/c/main/logo.png" alt="Chimteka Secondary School Logo" class="logo">
-    <h1><p style="font-size:28px;">CHIMTEKA COMMUNITY DAY SECONDARY-ODL</p></h1>
+    <img src="https://raw.githubusercontent.com/enitac/n/main/logo.png" alt="Namitete Secondary School Logo" class="logo">
+    <h1><p style="font-size:28px;">NAMITETE SECONDARY</p></h1>
     <h2>EXAM PORTAL</h2>
     <label for="selectedForm">Select Form / Sankhani Kalasi</label>
     <select id="selectedForm">
@@ -948,7 +1237,7 @@ function saveSelectedSubjectsToRepo() {
         
     </div>
 
-    <button onclick="openAdminLogin()">LOGIN</button>
+    <button onclick="openAdminLogin()">ADMIN</button>
     <p style="font-size:11px; margin-top: 15px; color: #7f8c8d;">Designed by CHIKUMBUTSO LUBAINI-0 994 039 325. All rights reserved.</p>
 
     <!-- Front Page Popup (only visible inside #initialPage) -->
@@ -964,12 +1253,12 @@ function saveSelectedSubjectsToRepo() {
     <button class="back-btn" onclick="handleBriefBack()" style="position: absolute; top: 10px; left: 10px; width: auto; padding: 5px 10px; max-width: none !important; margin: 0;">Back</button>
 
     <header id="briefReportHeader" style="width: 100%;">
-        <img src="https://raw.githubusercontent.com/enitac/c/main/logo.png" class="logo" alt="School Logo">
+        <img src="https://raw.githubusercontent.com/enitac/n/main/logo.png" class="logo" alt="School Logo">
         <div id="briefReportHeaderRight">
-            <h3>CHIMTEKA COMMUNITY DAY SECONDARY SCHOOL</h3>
-            Private Bag 41,<br>
-            Magawa,<br>
-            Mchinji.
+            <h3>NAMITETE SECONDARY SCHOOL</h3>
+            Private Bag 3,<br>
+            Namitete,<br>
+            Lilongwe.
         </div>
     </header>
 
@@ -1015,14 +1304,14 @@ function saveSelectedSubjectsToRepo() {
 
     <header id="reportHeader" style="width: 100%;">
         <img 
-src="https://raw.githubusercontent.com/enitac/c/main/logo.png" class="logo" alt="School Logo">
+src="https://raw.githubusercontent.com/enitac/n/main/logo.png" class="logo" alt="School Logo">
         <div id="reportHeaderCenter">
             <div style="font-family: 'Times New Roman', Times, serif;">
  <div style="text-align: center;">
-<h1><p style="font-size:25px;">CHIMTEKA COMMUNITY DAY SECONDARY SCHOOL</p></h1>
+<h1><p style="font-size:25px;">NAMITETE SECONDARY SCHOOL</p></h1>
  <div style="text-align: center;">
 
-               <p style="margin:5px 0; font-size: 14pt;"><strong>Private  Bag  3,<br>Chimteka, Mchinji.</strong><br>
+               <p style="margin:5px 0; font-size: 14pt;"><strong>Private  Bag  3,<br>Namitete, Lilongwe.</strong><br>
 
 
         </div>
@@ -1087,17 +1376,19 @@ src="https://raw.githubusercontent.com/enitac/c/main/logo.png" class="logo" alt=
 
 <div id="adminLoginPage" class="page">
     <h2 id="adminLabel">Enter Password</h2>
-    <input type="password" id="adminPassword" placeholder="">
+    <input type="password" id="adminPassword" placeholder="" oninput="document.getElementById('adminLoginError').style.display='none'">
+    <div id="adminLoginError" style="color:#e74c3c; font-size:0.9em; display:none; margin-top:8px;"></div>
     <button id="adminLoginBtn" onclick="verifyAdmin()">Login</button>
+    <button id="setupWizardBtn" onclick="openSetupWizard()" style="background:#e67e22; margin-top:10px;">First-Time Setup</button>
     <button onclick="backToInitialPage()">Back</button>
 </div>
 
 <div id="adminHomePage" class="page">
-    <h2>Enter code to load and upload</h2>
-    <input type="password" id="githubToken" placeholder="" style="margin-bottom: 20px;">
+    <h2>EXAM MANAGEMENT SYSTEM</h2>
+    <p style="font-size:0.85em; color:#27ae60; margin:10px 0 20px 0;">ACTIVE</p>
     <button onclick="openDataEntryAuth()">DATA ENTRY</button>
     <button onclick="openUploadsAuth()">FILE UPLOADS</button>
-    <button onclick="openSheetsPage()">PROGRESS,GRADE,ANALYSIS SHEETS</button>
+    <button onclick="openSheetsPage()">PROGRESS,GRADE,DATA ANALYSIS SHEETS</button>
     <button onclick="openSubjectEntryMonitor()">Subject Score Entry Monitor Below</button>
    
     <select id="monitorClassSelect" onchange="openSubjectEntryMonitor()">
@@ -1167,7 +1458,7 @@ src="https://raw.githubusercontent.com/enitac/c/main/logo.png" class="logo" alt=
 </div>
 
 <div id="scoreSheetView" class="page">
-    <h2 id="markSheetHeader">CHIMTEKA COMMUNITY DAY SECONDARY SCHOOL - Mark Sheet - <span id="markSheetForm"></span> - Term <span id="markSheetTerm"></span></h2>
+    <h2 id="markSheetHeader">NAMITETE SECONDARY SCHOOL - Mark Sheet - <span id="markSheetForm"></span> - Term <span id="markSheetTerm"></span></h2>
 <input type="text" id="scoreSearchInput" placeholder="Search student..." onkeyup="filterScoreSheet()" style="max-width:300px;">
 
     <button onclick="openDataEntryPage()" style="position: absolute; top: 10px; left: 10px; width: auto; padding: 5px 10px; max-width: none !important; margin: 0;">Back</button>
@@ -1278,6 +1569,20 @@ src="https://raw.githubusercontent.com/enitac/c/main/logo.png" class="logo" alt=
     <input type="text" id="manualDOB" placeholder="Date of Birth (e.g. 2005-12-01)">
     <button onclick="addStudentManually()" style="background: #17a2b8;">Add Student to List</button>
     <button onclick="overwriteStudentData()" style="background: #e67e22;">Overwrite Existing Student</button>
+
+    <hr style="margin: 20px 0; border: 1px solid #ccc;">
+    <h3>Edit Student Names &amp; Sex</h3>
+    <p style="font-size: 0.9em; color: #7f8c8d; margin-bottom: 10px;">Select a class to edit student names and sex in bulk.</p>
+    <label for="editNamesClassSelect">Select Class:</label>
+    <select id="editNamesClassSelect" onchange="loadEditNamesUI()">
+        <option value="">--Select Class--</option>
+        <option value="form1">Form 1</option>
+        <option value="form2">Form 2</option>
+        <option value="form3">Form 3</option>
+        <option value="form4">Form 4</option>
+    </select>
+    <div id="editNamesContainer" style="margin-top:10px;max-height:400px;overflow-y:auto;border:1px solid #ddd;border-radius:6px;display:none;"></div>
+    <button id="saveEditedNamesBtn" onclick="saveEditedNames()" style="background:#27ae60;margin-top:10px;display:none;">Save Changes</button>
 
     <hr style="margin: 20px 0; border: 1px solid #ccc;">
     <h3>Clear Scores</h3>
@@ -1496,6 +1801,32 @@ src="https://raw.githubusercontent.com/enitac/c/main/logo.png" class="logo" alt=
         <button onclick="generateAllProgressReports()" style="margin-top: 10px; background: #28a745;">Progress Report Generator (Batch PDF)</button>
     </div>
 
+    <button id="batchPrintBtn" onclick="openBatchPrintSelector()" style="margin-top: 10px; background: #8e44ad;">Batch Print Progress Reports</button>
+
+    <!-- Batch Print Selection Container (hidden by default) -->
+    <div id="batchPrintSelector" style="display:none; margin-top:15px; border:1px solid #ddd; border-radius:8px; padding:15px; text-align:center;">
+        <h3 style="font-size:1em; color:#34495e; margin-bottom:10px;">Select Students to Print</h3>
+        <div style="display:flex; justify-content:center; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+            <button onclick="batchSelectAll()" class="small-btn" style="background:#27ae60; max-width:120px; margin:0; padding:8px 12px; font-size:0.85em;">Select All</button>
+            <button onclick="batchDeselectAll()" class="small-btn" style="background:#e74c3c; max-width:120px; margin:0; padding:8px 12px; font-size:0.85em;">Deselect All</button>
+            <button onclick="batchSelectRange()" class="small-btn" style="background:#2980b9; max-width:120px; margin:0; padding:8px 12px; font-size:0.85em;">Select Range</button>
+        </div>
+        <div id="batchRangeInputs" style="display:none; margin-bottom:10px;">
+            <div style="display:flex; justify-content:center; gap:6px; align-items:center;">
+                <label style="margin:0; font-size:0.85em; font-weight:500;">From #</label>
+                <input type="number" id="batchRangeFrom" min="1" style="width:60px; max-width:60px; padding:5px; margin:0; font-size:0.85em;">
+                <label style="margin:0; font-size:0.85em; font-weight:500;">To #</label>
+                <input type="number" id="batchRangeTo" min="1" style="width:60px; max-width:60px; padding:5px; margin:0; font-size:0.85em;">
+                <button onclick="applyBatchRange()" class="small-btn" style="background:#2980b9; max-width:60px; margin:0; padding:5px 8px; font-size:0.85em;">Go</button>
+            </div>
+        </div>
+        <div id="batchStudentList" style="max-height:300px; overflow-y:auto; border:1px solid #ddd; border-radius:6px; text-align:left;"></div>
+        <div style="display:flex; justify-content:center; gap:8px; margin-top:10px;">
+            <button onclick="executeBatchPrint()" style="background:#27ae60; max-width:200px; margin:0; padding:10px 16px;">Print Selected</button>
+            <button onclick="closeBatchPrintSelector()" style="background:#95a5a6; max-width:120px; margin:0; padding:10px 16px;">Cancel</button>
+        </div>
+    </div>
+
     <div style="display: flex; justify-content: center; gap: 10px; margin-top: 20px; max-width: 400px; margin-left: auto; margin-right: auto; flex-wrap: wrap;">
         <button onclick="openGradesPage()" style="width: 195px; max-width: 195px; margin: 5px;">View Grade Sheet</button>
         <button onclick="openAnalysisSelector()" style="width: 195px; max-width: 195px; margin: 5px;">View Analysis</button>
@@ -1503,7 +1834,7 @@ src="https://raw.githubusercontent.com/enitac/c/main/logo.png" class="logo" alt=
 </div>
 
 <div id="gradesPage" class="page">
-    <h2 id="gradeSheetHeader">CHIMTEKA COMMUNITY DAY SECONDARY SCHOOL - Grade Sheet - <span id="gradeSheetForm"></span> - Term <span id="gradeSheetTerm"></span></h2>
+    <h2 id="gradeSheetHeader">NAMITETE SECONDARY SCHOOL - Grade Sheet - <span id="gradeSheetForm"></span> - Term <span id="gradeSheetTerm"></span></h2>
 <input type="text" id="gradeSearchInput" placeholder="Search student..." onkeyup="filterGradeSheet()" style="max-width:300px;">
 
     <button onclick="openSheetsPage()" style="position: absolute; top: 10px; left: 10px; width: auto; padding: 5px 10px; max-width: none !important; margin: 0;">Back</button>
@@ -1542,7 +1873,7 @@ src="https://raw.githubusercontent.com/enitac/c/main/logo.png" class="logo" alt=
 </div>
 
 <div id="analysisPage" class="page">
-    <h2 id="analysisTitle">CHIMTEKA COMMUNITY DAY SECONDARY SCHOOL - Form 2 Class Analysis Report</h2>
+    <h2 id="analysisTitle">NAMITETE SECONDARY SCHOOL - Form 2 Class Analysis Report</h2>
     <button onclick="openAnalysisSelector()" style="position: absolute; top: 10px; left: 10px; width: auto; padding: 5px 10px; max-width: none !important; margin: 0;">Back</button>
     <button onclick="printSheet('analysisPage')" class="small-btn" style="float: right; margin-top: 10px; max-width: 150px;">Print Analysis (Landscape)</button>
     <div id="analysisTableWrapper" class="table-wrapper"> </div>
@@ -1551,9 +1882,10 @@ src="https://raw.githubusercontent.com/enitac/c/main/logo.png" class="logo" alt=
 <script>
 // --- GITHUB CONSTANTS ---
 const GITHUB_USER = 'enitac';
-const GITHUB_REPO = 'c';
+const GITHUB_REPO = 'n';
 const CONFIG_FILE = 'config.json';
-const ADMIN_PASSWORD = '00n'; // Placeholder for security testing/local use
+// Admin password is now the decryption password — set during First-Time Setup
+// No hardcoded password stored in file
 
 // --- CONFIGURATION STATE ---
 let currentConfig = null;
@@ -1570,7 +1902,7 @@ const SUBJECT_MAP = {
     "Biology": "Bio",
     "Chemistry": "Chem",
     "Chichewa": "Chic",
-    "Clothing and Textiles": "CTEX",
+    "Computer Studies": "Comp",
     "English": "Eng",
     "French": "Fr",
     "Geography": "Geo",
@@ -1651,7 +1983,7 @@ function computeGradeSheetPositions(students) {
     sorted.forEach((s,i)=>{
         const pos = (s.aggregate === lastAgg) ? lastPos : i + 1;
         s.__gradePosition = pos;
-        lastAgg = lastAgg;
+        lastAgg = s.aggregate;
         lastPos = pos;
     });
     return sorted;
@@ -1666,7 +1998,7 @@ function computePositionsByAggregate(students) {
     sorted.forEach((s,i)=>{
         const pos = (s.aggregate === lastAgg) ? lastPos : i + 1;
         s.position = pos;
-        lastAgg = lastAgg;
+        lastAgg = s.aggregate;
         lastPos = pos;
     });
     return sorted;
@@ -2189,6 +2521,52 @@ function printSheet(pageId) {
             border: 1px solid black !important;
             text-align: center !important;
         }
+        ${pageId === 'analysisPage' ? `
+        #analysisPage {
+            width: 75% !important;
+            left: auto !important;
+            right: auto !important;
+            margin: 0 auto !important;
+        }
+        #analysisPage #analysisTable {
+            table-layout: fixed !important;
+        }
+        #analysisPage #analysisTable th,
+        #analysisPage #analysisTable td {
+            padding: 3px 2px !important;
+            font-size: 9pt !important;
+            white-space: nowrap !important;
+        }
+        #analysisPage #analysisTable th:first-child,
+        #analysisPage #analysisTable td:first-child {
+            width: auto !important;
+            max-width: none !important;
+            white-space: normal !important;
+            overflow: visible !important;
+            text-overflow: unset !important;
+            word-wrap: break-word !important;
+        }
+        #analysisPage #analysisTable th:not(:first-child),
+        #analysisPage #analysisTable td:not(:first-child) {
+            width: 45px !important;
+            max-width: 45px !important;
+        }
+        #analysisPage #analysisSummaryTable,
+        #analysisPage #analysisSNETable {
+            width: 48% !important;
+        }
+        #analysisPage #analysisSummaryTable th,
+        #analysisPage #analysisSummaryTable td,
+        #analysisPage #analysisSNETable th,
+        #analysisPage #analysisSNETable td {
+            padding: 3px 4px !important;
+            font-size: 9pt !important;
+            white-space: nowrap !important;
+        }
+        #analysisPage h2 {
+            font-size: 13pt !important;
+        }
+        ` : ''}
         #${pageId} td:first-child, #${pageId} th:first-child,
         #${pageId} td:nth-child(2), #${pageId} th:nth-child(2),
         #${pageId} td:nth-child(3), #${pageId} th:nth-child(3) {
@@ -2220,6 +2598,190 @@ function printSheet(pageId) {
 function safeMsg(error) {
     let msg = error.message || String(error);
     return msg.replace(/https?:\/\/[^\s]+/g, '[connection error]');
+}
+
+// ============================================================
+// AUTO-MERGE SYSTEM: Prevents score overwrites when multiple
+// teachers save at the same time. Fetches latest data from
+// GitHub, merges pending changes on top, then saves with
+// automatic retry on SHA conflicts.
+// ============================================================
+
+// Fetch the LATEST raw CSV content from GitHub (bypasses cache)
+async function fetchLatestCSV(form, token) {
+    const url = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/main/${form}.csv`;
+    const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+    // Add cache-busting to ensure we get the absolute latest
+    const cacheBust = `?_t=${Date.now()}`;
+    const response = await fetch(url + cacheBust, { headers });
+    if (!response.ok) throw new Error(`Could not fetch latest ${form}.csv`);
+    const csv = await response.text();
+    return normalizeCSVData(csv).filter(s => s && s["Exam Number"]);
+}
+
+// Fetch the LATEST config.json from GitHub (bypasses cache)
+async function fetchLatestConfig(token) {
+    const url = `${API_BASE}${CONFIG_FILE}`;
+    const response = await fetch(url, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'Cache-Control': 'no-cache'
+        }
+    });
+    if (!response.ok) throw new Error('Could not fetch latest config.json');
+    const data = await response.json();
+    return { content: JSON.parse(atob(data.content)), sha: data.sha };
+}
+
+// Merge pending local changes into the latest remote CSV data.
+// Only the subjects that were changed locally get applied on top.
+function mergeCSVChanges(localData, latestRemoteData, changedSubjects) {
+    // If no specific subjects tracked, merge all non-empty subject scores from local
+    const subjects = changedSubjects && changedSubjects.length > 0 ? changedSubjects : ALL_SUBJECTS;
+    
+    // Build index of latest remote by Exam Number
+    const remoteMap = {};
+    latestRemoteData.forEach(s => { remoteMap[s["Exam Number"]] = s; });
+    
+    // For each student in local data, update only the changed subjects in remote
+    localData.forEach(localStudent => {
+        const examNo = localStudent["Exam Number"];
+        if (!examNo) return;
+        
+        if (remoteMap[examNo]) {
+            // Student exists in remote — apply only changed subjects
+            subjects.forEach(subj => {
+                const localVal = localStudent[subj];
+                // Apply if the value exists AND it is either a real score or an intentional clear ('-')
+                // Empty string '' means the field was missing/blank in CSV — skip it to preserve remote data
+                if (localVal !== undefined && localVal !== '') {
+                    remoteMap[examNo][subj] = localVal;
+                }
+            });
+            // Also carry over SNE changes (respect intentional clear with '-')
+            if (localStudent["SN"] !== undefined && localStudent["SN"] !== '') {
+                remoteMap[examNo]["SN"] = localStudent["SN"];
+            }
+        } else {
+            // New student not in remote — add them
+            remoteMap[examNo] = { ...localStudent };
+        }
+    });
+    
+    // Return merged array, preserving remote order with any new students appended
+    const merged = [];
+    const addedExamNos = new Set();
+    
+    // First, all remote students (in their original order)
+    latestRemoteData.forEach(s => {
+        merged.push(remoteMap[s["Exam Number"]]);
+        addedExamNos.add(s["Exam Number"]);
+    });
+    
+    // Then, any new students from local that weren't in remote
+    localData.forEach(s => {
+        if (!addedExamNos.has(s["Exam Number"])) {
+            merged.push(remoteMap[s["Exam Number"]]);
+        }
+    });
+    
+    return merged;
+}
+
+// Smart commit with auto-merge and retry on SHA conflict (up to 3 attempts)
+async function smartCommitCSV(form, localData, changedSubjects, commitMessage, maxRetries) {
+    maxRetries = maxRetries || 3;
+    const token = getDecryptedToken();
+    if (!token) throw new Error('No authorization available.');
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        // Step 1: Fetch latest SHA and data
+        const currentSha = await getCSVFileSha(form, token);
+        let baseData;
+        
+        try {
+            baseData = await fetchLatestCSV(form, token);
+        } catch (e) {
+            // If CSV doesn't exist yet, use local data as-is
+            baseData = [];
+        }
+        
+        // Step 2: Merge local changes on top of latest remote data
+        const mergedData = mergeCSVChanges(localData, baseData, changedSubjects);
+        
+        // Update local cache with merged result so UI stays in sync
+        currentClassData[form] = mergedData;
+        
+        // Step 3: Build CSV and commit
+        const csvString = Papa.unparse(mergedData, { header: true, columns: ALL_HEADERS });
+        const base64Content = btoa(unescape(encodeURIComponent(csvString)));
+        
+        const result = await commitFile(form + '.csv', commitMessage, base64Content, currentSha, token, 'PUT');
+        
+        if (result) {
+            currentDataSha[form] = result.content.sha;
+            return result;
+        }
+        
+        // If commitFile returned null but didn't throw, it might be a SHA conflict
+        console.warn(`Save attempt ${attempt} failed for ${form}, retrying...`);
+        if (attempt < maxRetries) {
+            await new Promise(r => setTimeout(r, 1000 * attempt)); // Backoff
+        }
+    }
+    
+    throw new Error(`Failed to save ${form} after ${maxRetries} attempts. Please refresh and try again.`);
+}
+
+// Smart config commit with auto-merge and retry
+async function smartCommitConfig(newConfigData, commitMessage, maxRetries) {
+    maxRetries = maxRetries || 3;
+    const token = getDecryptedToken();
+    if (!token) throw new Error('No authorization available.');
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        // Step 1: Fetch latest config + SHA
+        const { content: remoteConfig, sha: remoteSha } = await fetchLatestConfig(token);
+        
+        // Step 2: Deep merge — start with remote, overlay local changes
+        const merged = { ...remoteConfig, ...newConfigData };
+        // Deep merge nested objects
+        ['teachers', 'hiddenSubjects', 'locks', 'gradeKeys'].forEach(key => {
+            if (newConfigData[key]) {
+                merged[key] = {};
+                // Copy remote base
+                if (remoteConfig[key]) {
+                    Object.keys(remoteConfig[key]).forEach(k => {
+                        merged[key][k] = { ...remoteConfig[key][k] };
+                    });
+                }
+                // Overlay local changes
+                Object.keys(newConfigData[key]).forEach(k => {
+                    merged[key][k] = { ...(merged[key][k] || {}), ...newConfigData[key][k] };
+                });
+            }
+        });
+        
+        // Step 3: Commit
+        const jsonContent = JSON.stringify(merged, null, 2);
+        const base64Content = btoa(unescape(encodeURIComponent(jsonContent)));
+        
+        const result = await commitFile(CONFIG_FILE, commitMessage, base64Content, remoteSha, token, 'PUT');
+        
+        if (result) {
+            configSha = result.content.sha;
+            currentConfig = merged;
+            return result;
+        }
+        
+        console.warn(`Config save attempt ${attempt} failed, retrying...`);
+        if (attempt < maxRetries) {
+            await new Promise(r => setTimeout(r, 1000 * attempt));
+        }
+    }
+    
+    throw new Error('Failed to save config after multiple attempts. Please refresh and try again.');
 }
 
 async function commitFile(path, message, content, sha, token, method) {
@@ -2287,7 +2849,7 @@ async function fetchClassData(form) {
         return currentClassData[form];
     }
 
-    const token = document.getElementById('githubToken') ? document.getElementById('githubToken').value : null;
+    const token = getDecryptedToken();
     const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
 
     try {
@@ -2377,7 +2939,7 @@ async function initializeConfig(token) {
 }
 
 async function handleSaveConfig() {
-    const token = document.getElementById('githubToken').value;
+    const token = getDecryptedToken();
     if (!token) {
         alert('Please enter your Authorization Code.');
         return;
@@ -2417,31 +2979,24 @@ async function handleSaveConfig() {
         });
     });
 
-    updateLoadingPercent(40);
-
-    const jsonContent = JSON.stringify(newConfig, null, 2);
-    const base64Content = btoa(unescape(encodeURIComponent(jsonContent))); // UTF-8 fix
+    updateLoadingPercent(30);
     const commitMessage = `Update configuration: term ${newConfig.term}, ${new Date().toLocaleString()}`;
 
-    const result = await commitFile(
-        CONFIG_FILE,
-        commitMessage,
-        base64Content,
-        configSha,
-        token,
-        'PUT'
-    );
-
-    hideLoading();
-    if (result) {
-        configSha = result.content.sha;
-        currentConfig = newConfig;
-        alert('Wow! configuration saved successfully.');
+    // AUTO-MERGE: Fetch latest config, merge, save with retry
+    try {
+        await smartCommitConfig(newConfig, commitMessage);
+        updateLoadingPercent(100);
+        hideLoading();
+        alert('Configuration saved successfully (auto-merged with latest)!');
+    } catch (error) {
+        hideLoading();
+        console.error('Config save failed:', error);
+        alert(`Failed to save configuration: ${safeMsg(error)}`);
     }
 }
 
 async function uploadCSV() {
-    const token = document.getElementById('githubToken').value;
+    const token = getDecryptedToken();
     const form = document.getElementById('classDropdown').value;
     const fileInput = document.getElementById('csvUpload');
 
@@ -2460,7 +3015,7 @@ async function uploadCSV() {
 
     const file = fileInput.files[0];
     const fileName = `${form}.csv`;
-    const commitMessage = `Upload new data for ${form} (${file.name})`;
+    const commitMessage = `Upload merged data for ${form} (${file.name})`;
 
     showLoading();
     updateLoadingPercent(10);
@@ -2475,35 +3030,33 @@ async function uploadCSV() {
 
         const base64Content = fileContent.split(',')[1];
 
-        updateLoadingPercent(40);
+        updateLoadingPercent(30);
 
-        let sha = await getCSVFileSha(form, token);
-
-        updateLoadingPercent(70);
-
-        const result = await commitFile(
-            fileName,
-            commitMessage,
-            base64Content,
-            sha,
-            token,
-            'PUT'
-        );
-
-        hideLoading();
-        if (result) {
-            alert(`File ${fileName} uploaded/updated successfully!`);
-            // --- SURGICAL FIX: Parse and cache uploaded data in memory for instant access ---
-            try {
-                const csvText = decodeURIComponent(escape(atob(base64Content)));
-                currentClassData[form] = normalizeCSVData(csvText).filter(s => s && s["Exam Number"]);
-            } catch(e) {
-                currentClassData[form] = null; // Fallback to re-fetch on next access
-            }
-            currentDataSha[form] = result.content.sha;
-            refreshFileList();
-            fileInput.value = '';
+        // Parse the uploaded CSV into structured data
+        let uploadedData;
+        try {
+            const csvText = decodeURIComponent(escape(atob(base64Content)));
+            uploadedData = normalizeCSVData(csvText).filter(s => s && s["Exam Number"]);
+        } catch(e) {
+            hideLoading();
+            alert('Failed to parse the uploaded CSV file. Please check the file format.');
+            return;
         }
+
+        updateLoadingPercent(50);
+
+        // SMART MERGE UPLOAD: Use smartCommitCSV to merge uploaded data with latest remote
+        // This prevents overwriting scores entered by other teachers for different subjects
+        await smartCommitCSV(form, uploadedData, ALL_SUBJECTS, commitMessage);
+
+        // Update local cache with merged result
+        // (smartCommitCSV already updated currentClassData[form] internally)
+
+        updateLoadingPercent(100);
+        hideLoading();
+        alert(`File ${fileName} merged and saved successfully! Other teachers' scores were preserved.`);
+        refreshFileList();
+        fileInput.value = '';
 
     } catch (error) {
         hideLoading();
@@ -2513,7 +3066,7 @@ async function uploadCSV() {
 }
 
 async function refreshFileList() {
-    const token = document.getElementById('githubToken').value;
+    const token = getDecryptedToken();
      const deleteDropdown = document.getElementById('deleteDropdown');
     deleteDropdown.innerHTML = '<option value="">-- Select CSV File --</option>';
     currentDataSha = {};
@@ -2553,7 +3106,7 @@ async function refreshFileList() {
 }
 
 async function deleteCSV() {
-    const token = document.getElementById('githubToken').value;
+    const token = getDecryptedToken();
     const deleteDropdown = document.getElementById('deleteDropdown');
     const selectedValue = deleteDropdown.value;
 
@@ -2599,7 +3152,7 @@ async function deleteCSV() {
 async function submitAndSaveScores() {
     const form = document.getElementById('dataClassSelect').value;
     const subject = document.getElementById('dataSubjectSelect').value;
-    const token = document.getElementById('githubToken').value;
+    const token = getDecryptedToken();
 
     if (!form || !subject) {
         alert('Please select a Class and Subject.');
@@ -2615,10 +3168,6 @@ async function submitAndSaveScores() {
     updateLoadingPercent(10);
 
     try {
-        const fileName = `${form}.csv`;
-        const currentSha = await getCSVFileSha(form, token);
-        updateLoadingPercent(40);
-
         const classData = currentClassData[form];
         if (!classData || classData.length === 0) {
             hideLoading();
@@ -2626,43 +3175,25 @@ async function submitAndSaveScores() {
             return;
         }
 
-        updateLoadingPercent(60);
-
-        const csvString = Papa.unparse(classData, {
-            header: true,
-            columns: ALL_HEADERS
-        });
-
-        const base64Content = btoa(unescape(encodeURIComponent(csvString))); // UTF-8 fix
+        updateLoadingPercent(30);
         const commitMessage = `Update: ${form} - ${subject} (${new Date().toLocaleString()})`;
 
-        const result = await commitFile(
-            fileName,
-            commitMessage,
-            base64Content,
-            currentSha,
-            token,
-            'PUT'
-        );
+        // AUTO-MERGE: Fetch latest remote, merge our subject changes, save
+        await smartCommitCSV(form, classData, [subject], commitMessage);
 
-        if (result) {
-            currentDataSha[form] = result.content.sha;
+        // Keep memory data intact (smartCommitCSV already updated the cache)
+        showStudentMarksList();
 
-            // Keep memory data intact (no reset)
-            showStudentMarksList();
-
-            if (document.getElementById('sheetClassSelect').value === form) {
-                displayScoreSheet();
-            }
-
-            if (document.getElementById('gradesClassSelect').value === form) {
-                displayGradesSheet();
-            }
-
-            updateLoadingPercent(100);
-            hideLoading();
-            
+        if (document.getElementById('sheetClassSelect').value === form) {
+            displayScoreSheet();
         }
+
+        if (document.getElementById('gradesClassSelect').value === form) {
+            displayGradesSheet();
+        }
+
+        updateLoadingPercent(100);
+        hideLoading();
 
     } catch (error) {
         hideLoading();
@@ -2714,7 +3245,8 @@ async function deleteScore() {
 function backToInitialPage() {
     goToPage('initialPage');
     document.getElementById('adminPassword').value = '';
-    document.getElementById('githubToken').value = '';
+    // Clear token from memory instantly
+    _decryptedGitHubToken = null;
     currentConfig = null;
     configSha = null;
     currentClassData = {};
@@ -2722,17 +3254,129 @@ function backToInitialPage() {
     initializeConfig(null);
 }
 
+
+function openSetupWizard() {
+    document.getElementById('setupToken').value = '';
+    document.getElementById('setupPassword').value = '';
+    document.getElementById('setupPasswordConfirm').value = '';
+    document.getElementById('setupEncryptedOutput').style.display = 'none';
+    document.getElementById('encryptedOutputLabel').style.display = 'none';
+    document.getElementById('copyTokenBtn').style.display = 'none';
+    document.getElementById('setupError').style.display = 'none';
+    document.getElementById('setupSuccess').style.display = 'none';
+    goToPage('setupWizardPage');
+}
+
+async function runSetupEncrypt() {
+    const token = document.getElementById('setupToken').value.trim();
+    const password = document.getElementById('setupPassword').value;
+    const confirm = document.getElementById('setupPasswordConfirm').value;
+    const errorEl = document.getElementById('setupError');
+    const successEl = document.getElementById('setupSuccess');
+    
+    errorEl.style.display = 'none';
+    successEl.style.display = 'none';
+    
+    if (!token) {
+        errorEl.textContent = 'Please enter your GitHub token.';
+        errorEl.style.display = 'block';
+        return;
+    }
+    
+    if (!token.startsWith('ghp_') && !token.startsWith('github_pat_')) {
+        errorEl.textContent = 'Token should start with ghp_ or github_pat_';
+        errorEl.style.display = 'block';
+        return;
+    }
+    
+    if (!password || password.length < 4) {
+        errorEl.textContent = 'Password must be at least 4 characters.';
+        errorEl.style.display = 'block';
+        return;
+    }
+    
+    if (password !== confirm) {
+        errorEl.textContent = 'Passwords do not match.';
+        errorEl.style.display = 'block';
+        return;
+    }
+    
+    try {
+        successEl.textContent = 'Encrypting...';
+        successEl.style.display = 'block';
+        
+        const encrypted = await encryptToken(token, password);
+
+        _sessionEncryptedToken = encrypted; // Store for current session login
+        
+        document.getElementById('setupEncryptedOutput').value = encrypted;
+        document.getElementById('setupEncryptedOutput').style.display = 'block';
+        document.getElementById('encryptedOutputLabel').style.display = 'block';
+        document.getElementById('copyTokenBtn').style.display = 'block';
+        
+        successEl.textContent = 'Token encrypted successfully! Click "Copy to Clipboard" below.';
+        successEl.style.display = 'block';
+    } catch (e) {
+        errorEl.textContent = 'Encryption failed: ' + e.message;
+        errorEl.style.display = 'block';
+    }
+}
+
+function copyEncryptedToken() {
+    const output = document.getElementById('setupEncryptedOutput');
+    if (!output.value) {
+        alert('Nothing to copy. Encrypt your token first.');
+        return;
+    }
+    output.select();
+    output.setSelectionRange(0, 99999);
+    navigator.clipboard.writeText(output.value).then(() => {
+        const btn = document.getElementById('copyTokenBtn');
+        btn.textContent = 'Copied!';
+        btn.style.background = '#27ae60';
+        setTimeout(() => {
+            btn.textContent = 'Copy to Clipboard';
+        }, 2000);
+    }).catch(() => {
+        // Fallback for older browsers
+        document.execCommand('copy');
+        const btn = document.getElementById('copyTokenBtn');
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = 'Copy to Clipboard'; }, 2000);
+    });
+}
+
 function openAdminLogin() {
+    if (isTokenSetup()) {
+        document.getElementById('setupWizardBtn').style.display = 'none';
+    }
     goToPage('adminLoginPage');
 }
 
 async function verifyAdmin() {
     const password = document.getElementById('adminPassword').value;
-    if (password === ADMIN_PASSWORD) {
-        await initializeConfig(document.getElementById('githubToken').value);
+    const errorEl = document.getElementById('adminLoginError');
+    if (errorEl) errorEl.style.display = 'none';
+
+    if (!password) {
+        if (errorEl) { errorEl.textContent = 'Please enter your password.'; errorEl.style.display = 'block'; }
+        return;
+    }
+
+    if (!isTokenSetup()) {
+        if (errorEl) { errorEl.textContent = 'No encrypted token found. Click "First-Time Setup" to configure your token.'; errorEl.style.display = 'block'; }
+        return;
+    }
+
+    try {
+        const encryptedSource = _sessionEncryptedToken || ENCRYPTED_TOKEN_STORED;
+        const token = await decryptToken(encryptedSource, password);
+        _decryptedGitHubToken = token; // Store ONLY in memory
+        await initializeConfig(token);
         goToPage('adminHomePage');
-    } else {
-        alert('Invalid Password.');
+    } catch (e) {
+        console.error('Decryption failed:', e);
+        if (errorEl) { errorEl.textContent = 'Incorrect password. Please try again.'; errorEl.style.display = 'block'; }
     }
 }
 
@@ -2793,7 +3437,7 @@ function showPasswordModal(message) {
 }
 
 async function openUploadsAuth() {
-    const token = document.getElementById('githubToken').value;
+    const token = getDecryptedToken();
     if (!token) {
         alert('You need Authorization Code.');
         return;
@@ -2815,11 +3459,11 @@ async function openUploadsAuth() {
 }
 
 // --- ARCHIVE SECTION FUNCTIONS ---
-const ARCHIVE_REPO = 'c2';
+const ARCHIVE_REPO = 'en2';
 const ARCHIVE_API_BASE = `https://api.github.com/repos/${GITHUB_USER}/${ARCHIVE_REPO}/contents/`;
 
 async function archiveExamData() {
-    const token = document.getElementById('githubToken').value;
+    const token = getDecryptedToken();
     const form = document.getElementById('archiveClassSelect').value;
     const year = document.getElementById('archiveYearInput').value.trim();
     const term = document.getElementById('archiveTermSelect').value;
@@ -2913,7 +3557,7 @@ async function archiveExamData() {
 
 // --- FUNCTION TO CLEAR ARCHIVE DATA ---
 async function clearArchiveData() {
-    const token = document.getElementById('githubToken').value;
+    const token = getDecryptedToken();
     const form = document.getElementById('archiveClassSelect').value;
     const year = document.getElementById('archiveYearInput').value.trim();
     const term = document.getElementById('archiveTermSelect').value;
@@ -3012,7 +3656,7 @@ async function searchArchiveResults() {
         return;
     }
 
-    const token = document.getElementById('githubToken').value;
+    const token = getDecryptedToken();
     if (!token) {
         resultsDiv.innerHTML = '<p style="color:#e74c3c;">Authorization Code required to search archives.</p>';
         return;
@@ -3395,7 +4039,7 @@ function saveArchiveDetailPdf() {
 
 
 function openDataEntryAuth() {
-    const token = document.getElementById('githubToken').value;
+    const token = getDecryptedToken();
     if (!token) {
         alert('You need Authorization Code.');
         return;
@@ -4117,7 +4761,7 @@ async function displayAnalysisSheet(form) {
     }
 
     // Update title with school name and form
-    document.getElementById('analysisTitle').textContent = `CHIMTEKA COMMUNITY DAY SECONDARY SCHOOL - ${form.toUpperCase().replace('FORM', 'Form ')} Class Analysis Report`;
+    document.getElementById('analysisTitle').textContent = `NAMITETE SECONDARY SCHOOL - ${form.toUpperCase().replace('FORM', 'Form ')} Class Analysis Report`;
 
     const isLowerForm = form === 'form1' || form === 'form2';
     // Per-class grade key with fallback to legacy
@@ -4548,7 +5192,7 @@ async function populateDeleteStudentDropdown() {
     sel.innerHTML = '<option value="">-- Select Student --</option>';
     if (!form) return;
 
-    const token = document.getElementById('githubToken').value;
+    const token = getDecryptedToken();
     const students = await fetchClassData(form);
     if (!students || students.length === 0) return;
 
@@ -4561,7 +5205,7 @@ async function populateDeleteStudentDropdown() {
 }
 
 async function deleteStudentFromList() {
-    const token = document.getElementById('githubToken').value;
+    const token = getDecryptedToken();
     const form = document.getElementById('deleteStudentClassSelect').value;
     const studentIndex = document.getElementById('deleteStudentSelect').value;
     const mode = document.getElementById('deleteModeSelect').value;
@@ -4618,43 +5262,35 @@ async function deleteStudentFromList() {
     updateLoadingPercent(10);
 
     try {
-        const fileName = `${form}.csv`;
-        const currentSha = await getCSVFileSha(form, token);
-        updateLoadingPercent(50);
-
-        const csvString = Papa.unparse(classData, { header: true, columns: ALL_HEADERS });
-        const base64Content = btoa(unescape(encodeURIComponent(csvString)));
         const commitMessage = mode === 'with'
             ? `Replaced student ${studentExamNo} with ${document.getElementById('replacementExamNo').value.trim().toUpperCase()} in ${form}`
             : `Deleted student ${studentExamNo} from ${form}`;
 
-        const result = await commitFile(fileName, commitMessage, base64Content, currentSha, token, 'PUT');
+        // AUTO-MERGE: Fetch latest remote, merge student changes, save
+        await smartCommitCSV(form, classData, ALL_SUBJECTS, commitMessage);
 
         hideLoading();
-        if (result) {
-            currentDataSha[form] = result.content.sha;
-            statusEl.textContent = mode === 'with'
-                ? `Success! "${studentName}" replaced with "${document.getElementById('replacementName').value.trim()}" in ${form.toUpperCase()}.`
-                : `Success! "${studentName}" (${studentExamNo}) deleted from ${form.toUpperCase()}.`;
-            statusEl.style.color = '#2ecc71';
+        statusEl.textContent = mode === 'with'
+            ? `Success! "${studentName}" replaced with "${document.getElementById('replacementName').value.trim()}" in ${form.toUpperCase()}.`
+            : `Success! "${studentName}" (${studentExamNo}) deleted from ${form.toUpperCase()}.`;
+        statusEl.style.color = '#2ecc71';
 
-            // Refresh dropdown
-            populateDeleteStudentDropdown();
+        // Refresh dropdown
+        populateDeleteStudentDropdown();
 
-            // Clear replacement fields
-            if (mode === 'with') {
-                document.getElementById('replacementName').value = '';
-                document.getElementById('replacementExamNo').value = '';
-                document.getElementById('replacementSex').value = '';
-                document.getElementById('replacementDOB').value = '';
-            }
+        // Clear replacement fields
+        if (mode === 'with') {
+            document.getElementById('replacementName').value = '';
+            document.getElementById('replacementExamNo').value = '';
+            document.getElementById('replacementSex').value = '';
+            document.getElementById('replacementDOB').value = '';
+        }
 
-            // Refresh data entry if showing this class
-            const dataForm = document.getElementById('dataClassSelect');
-            const dataSubject = document.getElementById('dataSubjectSelect');
-            if (dataForm && dataSubject && dataForm.value === form && dataSubject.value) {
-                showStudentMarksList();
-            }
+        // Refresh data entry if showing this class
+        const dataForm = document.getElementById('dataClassSelect');
+        const dataSubject = document.getElementById('dataSubjectSelect');
+        if (dataForm && dataSubject && dataForm.value === form && dataSubject.value) {
+            showStudentMarksList();
         }
     } catch (error) {
         hideLoading();
@@ -4875,6 +5511,293 @@ async function generateAllProgressReports() {
     alert('All reports have been generated and sent to your downloads folder.');
 }
 
+// === BATCH PRINT PROGRESS REPORTS (SELECTED STUDENTS) ===
+let _batchPrintClassData = [];
+
+function _batchMsg(msg, isError) {
+    const list = document.getElementById('batchStudentList');
+    const container = document.getElementById('batchPrintSelector');
+    container.style.display = 'block';
+    list.innerHTML = '<p style="padding:15px;text-align:center;color:' + (isError ? '#e74c3c' : '#2c3e50') + ';font-weight:600;">' + msg + '</p>';
+}
+
+async function openBatchPrintSelector() {
+    const form = document.getElementById('progressClassSelect').value;
+    if (!form) {
+        _batchMsg('Please select a Class/Form first.', true);
+        return;
+    }
+
+    try {
+        const data = await fetchClassData(form);
+        if (!data || data.length === 0) {
+            _batchMsg('No student data found for this class.', true);
+            return;
+        }
+
+        _batchPrintClassData = data;
+        const container = document.getElementById('batchPrintSelector');
+        const list = document.getElementById('batchStudentList');
+        container.style.display = 'block';
+        document.getElementById('batchRangeInputs').style.display = 'none';
+
+        let html = '<table style="width:100%;border-collapse:collapse;font-size:0.82em;">';
+        html += '<thead><tr style="background:#ecf0f1;position:sticky;top:0;z-index:1;"><th style="border:1px solid #bbb;padding:5px;text-align:center;width:10%;">#</th><th style="border:1px solid #bbb;padding:5px;text-align:center;width:20%;">Exam No</th><th style="border:1px solid #bbb;padding:5px;text-align:center;width:15%;">Sex</th><th style="border:1px solid #bbb;padding:5px;text-align:center;">Student Name</th></tr></thead><tbody>';
+
+        data.forEach((s, i) => {
+            const bg = i % 2 === 0 ? '#fff' : '#f9f9f9';
+            const examNo = s["Exam Number"] || '';
+            const name = s["STUDENT'S NAME"] || '';
+            const sex = s["Sex"] || '';
+            html += '<tr style="background:' + bg + ';">';
+            html += '<td style="border:1px solid #ddd;padding:4px;text-align:center;"><input type="checkbox" class="batch-student-cb" data-idx="' + i + '" checked style="cursor:pointer;width:16px;height:16px;" /></td>';
+            html += '<td style="border:1px solid #ddd;padding:4px;text-align:center;font-weight:bold;">' + examNo + '</td>';
+            html += '<td style="border:1px solid #ddd;padding:4px;text-align:center;">' + sex + '</td>';
+            html += '<td style="border:1px solid #ddd;padding:4px;text-align:left;">' + name + '</td>';
+            html += '</tr>';
+        });
+
+        html += '</tbody></table>';
+        list.innerHTML = html;
+    } catch (err) {
+        console.error('openBatchPrintSelector error:', err);
+        _batchMsg('Failed to load students. Please try again.', true);
+    }
+}
+
+function closeBatchPrintSelector() {
+    document.getElementById('batchPrintSelector').style.display = 'none';
+    _batchPrintClassData = [];
+}
+
+function batchSelectAll() {
+    document.querySelectorAll('.batch-student-cb').forEach(cb => cb.checked = true);
+}
+
+function batchDeselectAll() {
+    document.querySelectorAll('.batch-student-cb').forEach(cb => cb.checked = false);
+}
+
+function batchSelectRange() {
+    const el = document.getElementById('batchRangeInputs');
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    if (el.style.display === 'block') {
+        const total = _batchPrintClassData.length;
+        document.getElementById('batchRangeFrom').max = total;
+        document.getElementById('batchRangeTo').max = total;
+        document.getElementById('batchRangeFrom').placeholder = '1';
+        document.getElementById('batchRangeTo').placeholder = total;
+    }
+}
+
+function applyBatchRange() {
+    const from = parseInt(document.getElementById('batchRangeFrom').value);
+    const to = parseInt(document.getElementById('batchRangeTo').value);
+    const total = _batchPrintClassData.length;
+
+    if (isNaN(from) || isNaN(to) || from < 1 || to < 1 || from > total || to > total) {
+        _batchMsg('Enter valid range between 1 and ' + total + '.', true);
+        return;
+    }
+
+    const start = Math.min(from, to) - 1;
+    const end = Math.max(from, to) - 1;
+
+    document.querySelectorAll('.batch-student-cb').forEach(cb => cb.checked = false);
+    for (let i = start; i <= end; i++) {
+        const cb = document.querySelector('.batch-student-cb[data-idx="' + i + '"]');
+        if (cb) cb.checked = true;
+    }
+}
+
+async function executeBatchPrint() {
+    const checked = document.querySelectorAll('.batch-student-cb:checked');
+    if (checked.length === 0) {
+        _batchMsg('No students selected. Please check at least one student.', true);
+        return;
+    }
+
+    const form = document.getElementById('progressClassSelect').value;
+    const selectedIndices = [];
+    checked.forEach(cb => selectedIndices.push(parseInt(cb.getAttribute('data-idx'))));
+    const selectedData = selectedIndices.map(i => _batchPrintClassData[i]);
+
+    const confirmPrint = confirm('Generate and print ' + selectedData.length + ' progress report(s) for ' + form.toUpperCase() + '?\n\nNote: Your browser may ask for permission to download multiple files. Please allow it.');
+    if (!confirmPrint) return;
+
+    showLoading();
+    const originalLoadingText = document.getElementById('loadingText').textContent;
+
+    if (!currentConfig) await initializeConfig(null);
+
+    // Pre-calculate class-wide subject positions
+    const allData = _batchPrintClassData;
+    const subjectPositions = {};
+    ALL_SUBJECTS.forEach(sub => {
+        subjectPositions[sub] = computeSubjectPositions(form, sub, allData);
+    });
+
+    // Prepare ranking list from ALL students (not just selected)
+    const studentsWithMetrics = [];
+    for (const s of allData) {
+        const metrics = await calculateStudentMetrics(s, form);
+        studentsWithMetrics.push({ examNo: s["Exam Number"], metric: metrics.overallMetric, rankable: metrics.rankable });
+    }
+    let rankableStudents = studentsWithMetrics.filter(s => s.rankable);
+    rankableStudents.sort((a, b) => a.metric - b.metric);
+    const totalRankable = rankableStudents.length;
+
+    // Create or reuse batch print area
+    let batchArea = document.getElementById('batchPrintArea');
+    if (!batchArea) {
+        batchArea = document.createElement('div');
+        batchArea.id = 'batchPrintArea';
+        batchArea.style.display = 'none';
+        document.body.appendChild(batchArea);
+    }
+    batchArea.innerHTML = '';
+
+    const element = document.getElementById('progressReport');
+
+    for (let i = 0; i < selectedData.length; i++) {
+        const student = selectedData[i];
+        const studentNumber = student["Exam Number"];
+
+        const percent = Math.round(((i + 1) / selectedData.length) * 100);
+        updateLoadingPercent(percent);
+        document.getElementById('loadingText').textContent = 'Preparing ' + (i + 1) + ' of ' + selectedData.length + ': ' + student["STUDENT'S NAME"];
+
+        const metrics = await calculateStudentMetrics(student, form);
+        document.getElementById('reportStudentName').textContent = student["STUDENT'S NAME"] || '-';
+        document.getElementById('reportForm').textContent = form.toUpperCase();
+        document.getElementById('reportExamNo').textContent = studentNumber;
+        document.getElementById('reportTerm').textContent = currentConfig.term;
+        document.getElementById('reportYear').textContent = currentConfig.year || '2025';
+        document.getElementById('reportSex').textContent = student["Sex"] || '-';
+
+        const reportBody = document.getElementById('reportBody');
+        reportBody.innerHTML = '';
+
+        let studentWroteAny = false;
+        [...ALL_SUBJECTS].sort().forEach(subject => {
+            if (currentConfig && currentConfig.hiddenSubjects && currentConfig.hiddenSubjects[form] && currentConfig.hiddenSubjects[form][subject]) return;
+            const rawScore = student[subject];
+            if (rawScore !== undefined && rawScore !== null && rawScore.toString().trim() !== '') studentWroteAny = true;
+        });
+
+        [...ALL_SUBJECTS].sort().forEach(subject => {
+            if (currentConfig && currentConfig.hiddenSubjects && currentConfig.hiddenSubjects[form] && currentConfig.hiddenSubjects[form][subject]) return;
+            const rawScore = student[subject];
+            let hasScore = rawScore !== undefined && rawScore !== null && rawScore.toString().trim() !== '';
+            const gr = hasScore ? getGradeAndRemark(form, rawScore) : { grade: '', remark: '' };
+            const pos = hasScore ? (subjectPositions[subject][studentNumber] || '') : '';
+            const teacher = hasScore ? (currentConfig.teachers[form][subject] || DEFAULT_TEACHER) : '';
+            const remark = hasScore ? ((form === 'form1' || form === 'form2') ? lowerFormRemarkFromGrade(gr.grade) : gr.remark) : '';
+            const row = reportBody.insertRow();
+            row.insertCell().textContent = subject;
+            row.insertCell().textContent = hasScore ? rawScore : '';
+            row.insertCell().textContent = gr.grade;
+            row.insertCell().textContent = pos;
+            row.insertCell().textContent = remark;
+            row.insertCell().textContent = teacher;
+        });
+
+        const isUpperForm = form === 'form3' || form === 'form4';
+        const lastRow = reportBody.insertRow();
+        const labelCell = lastRow.insertCell();
+        labelCell.style.fontWeight = 'bold';
+        labelCell.textContent = isUpperForm ? 'AGGREGATE' : 'AVERAGE (BEST 6)';
+        if (isUpperForm) {
+            lastRow.insertCell();
+            const aggCell = lastRow.insertCell();
+            aggCell.textContent = metrics.aggregate !== '-' ? metrics.aggregate : '-';
+        } else {
+            const avgCell = lastRow.insertCell();
+            avgCell.textContent = metrics.average > 0 ? metrics.average.toFixed(1) : '-';
+            lastRow.insertCell();
+        }
+        lastRow.insertCell(); lastRow.insertCell(); lastRow.insertCell();
+
+        let overallRank = 'N/A';
+        let positionNum = null;
+        if (metrics.rankable) {
+            const studentMetric = rankableStudents.find(s => s.examNo === studentNumber);
+            if (studentMetric) {
+                const idx = rankableStudents.findIndex(s => s.metric === studentMetric.metric) + 1;
+                positionNum = idx;
+                overallRank = idx;
+            }
+        }
+
+        const summaryDiv = document.getElementById('reportSummary').querySelector('div');
+        if (isUpperForm) {
+            summaryDiv.innerHTML = 'POSITION : <strong><span id="reportPosition">' + overallRank + '</span></strong>&nbsp;&nbsp;&nbsp;&nbsp;OUT OF: <strong><span id="reportTotalStudents">' + totalRankable + '</span></strong>&nbsp;&nbsp;&nbsp;&nbsp;STATUS: <strong><span id="reportStatus">' + computeFinalRemark(form, student) + '</span></strong>';
+        } else {
+            summaryDiv.innerHTML = 'TOTAL SCORES: <strong><span id="reportTotalScores">' + (metrics.totalScore > 0 ? metrics.totalScore : '0') + '</span></strong>&nbsp;&nbsp;&nbsp;&nbsp;POSITION : <strong><span id="reportPosition">' + overallRank + '</span></strong>&nbsp;&nbsp;&nbsp;&nbsp;OUT OF: <strong><span id="reportTotalStudents">' + totalRankable + '</span></strong>&nbsp;&nbsp;&nbsp;&nbsp;STATUS: <strong><span id="reportStatus">' + computeFinalRemark(form, student) + '</span></strong>';
+        }
+
+        document.getElementById('reportPosition').textContent = overallRank;
+        document.getElementById('reportTotalStudents').textContent = totalRankable;
+        document.getElementById('reportStatus').textContent = computeFinalRemark(form, student);
+
+        if (studentWroteAny) {
+            document.getElementById('reportTeacherComment').textContent = generateTeacherComment(form, student, metrics.average, 0, ALL_SUBJECTS.length);
+            document.getElementById('reportHeadComment').textContent = generateHeadComment(form, student, metrics.average, 0, ALL_SUBJECTS.length, positionNum, totalRankable);
+        } else {
+            document.getElementById('reportTeacherComment').textContent = '';
+            document.getElementById('reportHeadComment').textContent = '';
+        }
+
+        document.getElementById('reportNextTerm').textContent = currentConfig.nextTermOpens || '-';
+        document.getElementById('reportFees').textContent = currentConfig.fees || '-';
+        document.getElementById('gradeKeyPlaceholder').innerHTML = getGradeKeyTableHTML(form);
+
+        // Show report, clone it into batch area, then hide again
+        element.style.display = 'block';
+        element.style.position = 'relative';
+        element.style.left = '';
+        const clone = element.cloneNode(true);
+        clone.removeAttribute('id');
+        clone.className = 'progressReportClone';
+        clone.style.display = 'block';
+        clone.style.position = 'relative';
+        clone.style.left = '';
+        batchArea.appendChild(clone);
+        element.style.display = 'none';
+    }
+
+    hideLoading();
+    document.getElementById('loadingText').textContent = originalLoadingText;
+
+    // Hide current page, show batch area, trigger print
+    document.getElementById('sheetsPage').style.display = 'none';
+    document.getElementById('batchPrintSelector').style.display = 'none';
+    batchArea.style.display = 'block';
+
+    // Scale each clone to fit A4 content area (2cm top + 1cm bottom margins)
+    // Using zoom (not transform) because zoom changes actual layout size, which
+    // the print engine uses for page breaking. transform:scale() only changes
+    // visual size and does NOT prevent page overflow.
+    const clones = batchArea.querySelectorAll('.progressReportClone');
+    clones.forEach(function(clone) {
+        var cloneH = clone.offsetHeight;
+        var maxH = 960;
+        if (cloneH > maxH) {
+            var scale = maxH / cloneH;
+            clone.style.zoom = scale;
+        }
+    });
+
+    window.onafterprint = function() {
+        batchArea.style.display = 'none';
+        batchArea.innerHTML = '';
+        document.getElementById('sheetsPage').style.display = 'block';
+        window.onafterprint = null;
+    };
+
+    window.print();
+}
+
 </script>
 
 <script>
@@ -4957,7 +5880,7 @@ async function refreshSubjectMonitor(form) {
 
 // --- SURGICAL FIX: MANUAL STUDENT ENTRY LOGIC ---
 async function addStudentManually() {
-    const token = document.getElementById('githubToken').value;
+    const token = getDecryptedToken();
     const form = document.getElementById('manualClassSelect').value;
     const name = document.getElementById('manualStudentName').value.trim();
     const examNo = document.getElementById('manualExamNumber').value.trim().toUpperCase();
@@ -4996,27 +5919,19 @@ async function addStudentManually() {
         classData.push(newStudent);
         currentClassData[form] = classData;
 
-        // Save entire updated class file back to GitHub
-        const fileName = `${form}.csv`;
-        const currentSha = await getCSVFileSha(form, token);
-        updateLoadingPercent(60);
-
-        const csvString = Papa.unparse(classData, { header: true, columns: ALL_HEADERS });
-        const base64Content = btoa(unescape(encodeURIComponent(csvString))); // UTF-8 fix
+        updateLoadingPercent(40);
         const commitMessage = `Added student: ${name} (${examNo}) to ${form}`;
 
-        const result = await commitFile(fileName, commitMessage, base64Content, currentSha, token, 'PUT');
+        // AUTO-MERGE: Fetch latest remote, merge new student, save
+        await smartCommitCSV(form, classData, ALL_SUBJECTS, commitMessage);
 
         hideLoading();
-        if (result) {
-            currentDataSha[form] = result.content.sha;
-            alert(`${name} added successfully to ${form.toUpperCase()}!`);
-            // Clear inputs
-            document.getElementById('manualStudentName').value = '';
-            document.getElementById('manualExamNumber').value = '';
-            document.getElementById('manualSex').value = '';
-            document.getElementById('manualDOB').value = '';
-        }
+        alert(`${name} added successfully to ${form.toUpperCase()} (auto-merged)!`);
+        // Clear inputs
+        document.getElementById('manualStudentName').value = '';
+        document.getElementById('manualExamNumber').value = '';
+        document.getElementById('manualSex').value = '';
+        document.getElementById('manualDOB').value = '';
     } catch (error) {
         hideLoading();
         console.error('Manual add failed:', error);
@@ -5170,8 +6085,8 @@ async function updateGradeRange(form, gradeKey, newValue) {
 }
 
 async function instantSaveGradeConfigToGitHub() {
-    const token = document.getElementById('githubToken');
-    if (!token || !token.value) {
+    const token = getDecryptedToken();
+    if (!token) {
         console.warn('No token available for instant grade save.');
         return;
     }
@@ -5188,26 +6103,15 @@ async function instantSaveGradeConfigToGitHub() {
             teachers: currentConfig.teachers || {},
             hiddenSubjects: currentConfig.hiddenSubjects || {},
             locks: currentConfig.locks || {},
-            passwordEnabled: currentConfig.passwordEnabled
+            passwordEnabled: currentConfig.passwordEnabled,
+            sneColumnVisible: currentConfig.sneColumnVisible
         };
 
-        const jsonContent = JSON.stringify(saveConfig, null, 2);
-        const base64Content = btoa(unescape(encodeURIComponent(jsonContent)));
         const commitMessage = `Grade update: ${new Date().toLocaleString()}`;
 
-        const result = await commitFile(
-            CONFIG_FILE,
-            commitMessage,
-            base64Content,
-            configSha,
-            token.value,
-            'PUT'
-        );
-
-        if (result) {
-            configSha = result.content.sha;
-            console.log('Grade config saved to GitHub instantly.');
-        }
+        // AUTO-MERGE: Smart save with retry instead of direct commit
+        await smartCommitConfig(saveConfig, commitMessage);
+        console.log('Grade config saved to GitHub (auto-merged).');
     } catch (error) {
         console.error('Instant grade save failed (non-blocking):', error);
     }
@@ -5398,7 +6302,7 @@ async function exportGradeSheetWithFilename() {
 
 // --- FUNCTION TO CLEAR SCORES FOR CLASS ---
 async function clearScoresForClass() {
-    const token = document.getElementById('githubToken').value;
+    const token = getDecryptedToken();
     const form = document.getElementById('clearScoresClassSelect').value;
     const subject = document.getElementById('clearSubjectSelect').value;
 
@@ -5439,24 +6343,17 @@ async function clearScoresForClass() {
 
         currentClassData[form] = classData;
 
-        // Save to GitHub
-        const fileName = `${form}.csv`;
-        const currentSha = await getCSVFileSha(form, token);
-        updateLoadingPercent(70);
-
-        const csvString = Papa.unparse(classData, { header: true, columns: ALL_HEADERS });
-        const base64Content = btoa(unescape(encodeURIComponent(csvString))); // UTF-8 fix
+        updateLoadingPercent(50);
         const commitMessage = subject 
             ? `Cleared ${subject} scores for ${form}` 
             : `Cleared all scores for ${form}`;
 
-        const result = await commitFile(fileName, commitMessage, base64Content, currentSha, token, 'PUT');
+        // AUTO-MERGE: Fetch latest remote, merge cleared scores, save
+        const clearSubjects = subject ? [subject] : ALL_SUBJECTS;
+        await smartCommitCSV(form, classData, clearSubjects, commitMessage);
 
         hideLoading();
-        if (result) {
-            currentDataSha[form] = result.content.sha;
-            alert('Scores cleared successfully!');
-        }
+        alert('Scores cleared successfully (auto-merged with latest)!');
     } catch (error) {
         hideLoading();
         console.error('Clear scores failed:', error);
@@ -5466,7 +6363,7 @@ async function clearScoresForClass() {
 
 // --- FUNCTION TO OVERWRITE EXISTING STUDENT DATA ---
 async function overwriteStudentData() {
-    const token = document.getElementById('githubToken').value;
+    const token = getDecryptedToken();
     const form = document.getElementById('manualClassSelect').value;
     const name = document.getElementById('manualStudentName').value.trim();
     const examNo = document.getElementById('manualExamNumber').value.trim().toUpperCase();
@@ -5481,7 +6378,7 @@ async function overwriteStudentData() {
 
     try {
         const classData = await fetchClassData(form);
-        updateLoadingPercent(40);
+        updateLoadingPercent(30);
 
         // Find the student by exam number
         const studentIndex = classData.findIndex(s => s["Exam Number"] === examNo);
@@ -5499,34 +6396,178 @@ async function overwriteStudentData() {
 
         currentClassData[form] = classData;
 
-        // Save to GitHub
-        const fileName = `${form}.csv`;
-        const currentSha = await getCSVFileSha(form, token);
-        updateLoadingPercent(70);
-
-        const csvString = Papa.unparse(classData, { header: true, columns: ALL_HEADERS });
-        const base64Content = btoa(unescape(encodeURIComponent(csvString))); // UTF-8 fix
+        // AUTO-MERGE: Fetch latest remote, merge changes, save
         const commitMessage = `Updated student data for ${examNo} in ${form}`;
-
-        const result = await commitFile(fileName, commitMessage, base64Content, currentSha, token, 'PUT');
+        await smartCommitCSV(form, classData, ALL_SUBJECTS, commitMessage);
 
         hideLoading();
-        if (result) {
-            currentDataSha[form] = result.content.sha;
-            alert(`Student ${examNo} updated successfully!`);
-            // Clear inputs
-            document.getElementById('manualStudentName').value = '';
-            document.getElementById('manualExamNumber').value = '';
-            document.getElementById('manualSex').value = '';
-            document.getElementById('manualDOB').value = '';
-        }
+        // Clear inputs
+        document.getElementById('manualStudentName').value = '';
+        document.getElementById('manualExamNumber').value = '';
+        document.getElementById('manualSex').value = '';
+        document.getElementById('manualDOB').value = '';
+        alert(`Student ${examNo} updated successfully (auto-merged with latest data)!`);
     } catch (error) {
         hideLoading();
         console.error('Overwrite failed:', error);
         alert(`Failed to update student: ${safeMsg(error)}`);
     }
 }
+
+// === EDIT STUDENT NAMES ===
+async function loadEditNamesUI() {
+    const form = document.getElementById('editNamesClassSelect').value;
+    const container = document.getElementById('editNamesContainer');
+    const saveBtn = document.getElementById('saveEditedNamesBtn');
+
+    if (!form) {
+        container.style.display = 'none';
+        saveBtn.style.display = 'none';
+        return;
+    }
+
+    container.innerHTML = '<p style="padding:15px;text-align:center;color:#7f8c8d;">Loading students...</p>';
+    container.style.display = 'block';
+    saveBtn.style.display = 'none';
+
+    try {
+        const classData = await fetchClassData(form);
+
+        if (!classData || classData.length === 0) {
+            container.innerHTML = '<p style="padding:15px;text-align:center;color:#e74c3c;">No students found in this class.</p>';
+            return;
+        }
+
+        let html = '<table style="width:100%;border-collapse:collapse;font-size:0.85em;">';
+        html += '<thead><tr style="background:#ecf0f1;position:sticky;top:0;z-index:1;"><th style="border:1px solid #bbb;padding:6px;text-align:center;width:30%;">Exam No</th><th style="border:1px solid #bbb;padding:6px;text-align:center;width:15%;">Sex</th><th style="border:1px solid #bbb;padding:6px;text-align:center;">Student Name</th></tr></thead><tbody>';
+
+        classData.forEach((student, index) => {
+            const examNo = student["Exam Number"] || '';
+            const name = student["STUDENT'S NAME"] || '';
+            const sex = student["Sex"] || '-';
+            html += `<tr style="background:${index % 2 === 0 ? '#fff' : '#f9f9f9'};">
+                <td style="border:1px solid #ddd;padding:5px 8px;text-align:center;font-weight:bold;">${examNo}</td>
+                <td style="border:1px solid #ddd;padding:5px 8px;text-align:center;"><select data-examno-sex="${examNo}" style="width:100%;padding:4px;border:1px solid #ccc;border-radius:4px;font-size:inherit;box-sizing:border-box;text-align:center;"><option value="M"${sex==='M'?' selected':''}>M</option><option value="F"${sex==='F'?' selected':''}>F</option></select></td>
+                <td style="border:1px solid #ddd;padding:4px;"><input type="text" data-examno="${examNo}" value="${name.replace(/"/g, '&quot;')}" style="width:100%;padding:4px 6px;border:1px solid #ccc;border-radius:4px;font-size:inherit;box-sizing:border-box;" /></td>
+            </tr>`;
+        });
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+        saveBtn.style.display = 'inline-block';
+
+    } catch (error) {
+        container.innerHTML = `<p style="padding:15px;text-align:center;color:#e74c3c;">Failed to load: ${safeMsg(error)}</p>`;
+    }
+}
+
+async function saveEditedNames() {
+    const form = document.getElementById('editNamesClassSelect').value;
+    const token = getDecryptedToken();
+
+    if (!token) { alert('Authorization Code required.'); return; }
+    if (!form) { alert('Please select a class.'); return; }
+
+    const inputs = document.querySelectorAll('#editNamesContainer input[data-examno]');
+    const sexSelects = document.querySelectorAll('#editNamesContainer select[data-examno-sex]');
+    if (inputs.length === 0) { alert('No students to update.'); return; }
+
+    showLoading();
+    updateLoadingPercent(10);
+
+    try {
+        const classData = await fetchClassData(form);
+        updateLoadingPercent(40);
+
+        let changesCount = 0;
+        let sexChangesCount = 0;
+        inputs.forEach(input => {
+            const examNo = input.getAttribute('data-examno');
+            const newName = input.value.trim();
+            if (!newName) return;
+
+            const student = classData.find(s => s["Exam Number"] === examNo);
+            if (student && student["STUDENT'S NAME"] !== newName) {
+                student["STUDENT'S NAME"] = newName;
+                changesCount++;
+            }
+        });
+
+        sexSelects.forEach(sel => {
+            const examNo = sel.getAttribute('data-examno-sex');
+            const newSex = sel.value;
+            const student = classData.find(s => s["Exam Number"] === examNo);
+            if (student && student["Sex"] !== newSex) {
+                student["Sex"] = newSex;
+                sexChangesCount++;
+            }
+        });
+
+        if (changesCount === 0 && sexChangesCount === 0) {
+            hideLoading();
+            alert('No name or sex changes detected.');
+            return;
+        }
+
+        currentClassData[form] = classData;
+        updateLoadingPercent(60);
+
+        const totalChanges = changesCount + sexChangesCount;
+        const commitMessage = `Edited ${totalChanges} student record(s) in ${form}`;
+        await smartCommitCSV(form, classData, ALL_SUBJECTS, commitMessage);
+
+        hideLoading();
+        let summaryParts = [];
+        if (changesCount > 0) summaryParts.push(`${changesCount} name(s)`);
+        if (sexChangesCount > 0) summaryParts.push(`${sexChangesCount} sex entry/entries`);
+        alert(`${summaryParts.join(' and ')} updated successfully in ${form.toUpperCase()} (auto-merged)!`);
+        loadEditNamesUI();
+    } catch (error) {
+        hideLoading();
+        console.error('Save edited names failed:', error);
+        alert(`Failed to save name changes: ${safeMsg(error)}`);
+    }
+}
 </script>
+
+<!-- SETUP WIZARD PAGE -->
+<div id="setupWizardPage" class="page" style="max-width:500px;">
+    <h2 style="color:#e67e22;">First-Time Token Setup</h2>
+    <p style="font-size:0.85em; color:#7f8c8d; margin:10px 0 20px 0;">Encrypt your GitHub Personal Access Token with a password. The encrypted token will be embedded in this HTML file.</p>
+    
+    <label for="setupToken">GitHub Personal Access Token</label>
+    <input type="password" id="setupToken" placeholder="ghp_..." style="max-width:400px;">
+    
+    <label for="setupPassword">Choose a Password (for login)</label>
+    <input type="password" id="setupPassword" placeholder="" style="max-width:400px;">
+    
+    <label for="setupPasswordConfirm">Confirm Password</label>
+    <input type="password" id="setupPasswordConfirm" placeholder="" style="max-width:400px;">
+    
+    <div id="setupError" style="color:#e74c3c; margin-top:10px; font-size:0.9em; display:none;"></div>
+    <div id="setupSuccess" style="color:#27ae60; margin-top:10px; font-size:0.9em; display:none;"></div>
+    
+    <label for="setupEncryptedOutput" id="encryptedOutputLabel" style="display:none; margin-top:15px;">Encrypted Token (copy this)</label>
+    <textarea id="setupEncryptedOutput" readonly placeholder="" style="display:none; max-width:400px; min-height:80px; font-size:0.75em; font-family:monospace; word-break:break-all;"></textarea>
+    
+    <button onclick="runSetupEncrypt()" style="background:#e67e22; margin-top:15px;">Encrypt Token</button>
+    <button onclick="copyEncryptedToken()" id="copyTokenBtn" style="background:#27ae60; display:none; margin-top:5px;">Copy to Clipboard</button>
+    <button onclick="goToPage('adminLoginPage')" style="margin-top:5px;">Back to Login</button>
+    
+    <div style="margin-top:20px; padding:15px; background:#f8f9fa; border-radius:8px; text-align:left; font-size:0.8em; color:#555;">
+        <strong>Instructions:</strong>
+        <ol style="margin-top:8px; padding-left:20px;">
+            <li>Enter your GitHub token (starts with ghp_...)</li>
+            <li>Choose a strong password (this is your login password)</li>
+            <li>Click "Encrypt Token"</li>
+            <li>Click "Copy to Clipboard"</li>
+            <li>Open this HTML file in a text editor</li>
+            <li>Find: __ENCRYPTED_TOKEN_HERE__</li>
+            <li>Replace it with the copied encrypted text</li>
+            <li>Save and re-upload to GitHub</li>
+        </ol>
+    </div>
+</div>
 
 </body>
 </html>
