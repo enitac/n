@@ -227,5 +227,5 @@
     }
   },
   "passwordEnabled": true,
-  "sneColumnVisible": false
+  "sneColumnVisible": true
 }
