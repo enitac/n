@@ -203,7 +203,11 @@
       "English": false,
       "French": false,
       "Geography": false,
-      "Home Economics": false
+      "Home Economics": false,
+      "History": false,
+      "Mathematics": false,
+      "Physics": false,
+      "Social/Life": false
     },
     "form4": {
       "Agriculture": true,
@@ -222,8 +226,20 @@
       "Computer Studies": true
     },
     "form2": {
-      "Chichewa": false,
-      "Agriculture": false
+      "Chichewa": true,
+      "Agriculture": true,
+      "Bible Knowledge": true,
+      "Biology": true,
+      "Chemistry": true,
+      "Computer Studies": true,
+      "English": true,
+      "French": true,
+      "Geography": true,
+      "History": true,
+      "Home Economics": true,
+      "Mathematics": true,
+      "Physics": true,
+      "Social/Life": true
     }
   },
   "passwordEnabled": true,
