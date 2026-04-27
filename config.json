@@ -230,16 +230,16 @@
       "Agriculture": true,
       "Bible Knowledge": true,
       "Biology": true,
-      "Chemistry": false,
-      "Computer Studies": false,
+      "Chemistry": true,
+      "Computer Studies": true,
       "English": true,
       "French": true,
       "Geography": true,
       "History": true,
       "Home Economics": true,
       "Mathematics": true,
-      "Physics": true,
-      "Social/Life": false
+      "Physics": false,
+      "Social/Life": true
     },
     "form3": {
       "Agriculture": true,
