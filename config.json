@@ -253,7 +253,7 @@
       "Geography": true,
       "History": true,
       "Home Economics": true,
-      "Mathematics": false,
+      "Mathematics": true,
       "Physics": true,
       "Social/Life": true
     }
