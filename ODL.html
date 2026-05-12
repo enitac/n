@@ -1511,7 +1511,7 @@ function saveSelectedSubjectsToRepo() {
 
 <div id="initialPage" class="page">
     <img src="https://raw.githubusercontent.com/enitac/n/main/logo.png" alt="Namitete Secondary School Logo" class="logo">
-    <h1><p style="font-size:28px;">NAMITETE SECONDARY-ODL</p></h1>
+    <h1><p style="font-size:28px;">NAMITETE SECONDARY SCHOOL-ODL</p></h1>
     <h2>EXAM PORTAL</h2>
     <label for="selectedForm">Select Form / Sankhani Kalasi</label>
     <select id="selectedForm">
@@ -1866,8 +1866,8 @@ src="https://raw.githubusercontent.com/enitac/n/main/logo.png" class="logo" alt=
     <button onclick="overwriteStudentData()" style="background: #e67e22;">Overwrite Existing Student</button>
 
     <hr style="margin: 20px 0; border: 1px solid #ccc;">
-    <h3>Edit Student Names &amp; Sex</h3>
-    <p style="font-size: 0.9em; color: #7f8c8d; margin-bottom: 10px;">Select a class to edit student names and sex in bulk.</p>
+    <h3>Edit Student Records</h3>
+    <p style="font-size: 0.9em; color: #7f8c8d; margin-bottom: 10px;">Select a class to edit student exam no, name, and sex in bulk.</p>
     <label for="editNamesClassSelect">Select Class:</label>
     <select id="editNamesClassSelect" onchange="loadEditNamesUI()">
         <option value="">--Select Class--</option>
@@ -2112,6 +2112,7 @@ src="https://raw.githubusercontent.com/enitac/n/main/logo.png" class="logo" alt=
                 <button onclick="applyBatchRange()" class="small-btn" style="background:#2980b9; max-width:60px; margin:0; padding:5px 8px; font-size:0.85em;">Go</button>
             </div>
         </div>
+        <input type="text" id="batchPrintSearchInput" placeholder="Quick find by name or exam no..." onkeyup="filterBatchPrintList()" style="max-width:100%; margin-bottom:8px;">
         <div id="batchStudentList" style="max-height:300px; overflow-y:auto; border:1px solid #ddd; border-radius:6px; text-align:left;"></div>
         <div style="display:flex; justify-content:center; gap:8px; margin-top:10px;">
             <button onclick="executeBatchPrint()" style="background:#27ae60; max-width:200px; margin:0; padding:10px 16px;">Print Selected</button>
@@ -2195,9 +2196,12 @@ const SUBJECT_MAP = {
     "Biology": "Bio",
     "Chemistry": "Chem",
     "Chichewa": "Chic",
+    "Computer Studies": "Comp",
     "English": "Eng",
+    "French": "Fr",
     "Geography": "Geo",
     "History": "Hist",
+    "Home Economics": "HEc",
     "Mathematics": "Mat",
     "Physics": "Phy",
     "Social/Life": "S/Life"
@@ -5008,6 +5012,9 @@ async function displayGradesSheet() {
         student.__numericPosition = numericPosition;
     });
 
+    // Default sort by position before caching and rendering
+    studentsWithMetrics.sort((a, b) => a.student.__numericPosition - b.student.__numericPosition);
+
     // Cache for toggle re-use
     _gradeSheetData = { form, isUpperForm, studentsWithMetrics };
 
@@ -5924,6 +5931,18 @@ async function openBatchPrintSelector() {
 function closeBatchPrintSelector() {
     document.getElementById('batchPrintSelector').style.display = 'none';
     _batchPrintClassData = [];
+    // Clear search input when closing
+    var searchInput = document.getElementById('batchPrintSearchInput');
+    if (searchInput) searchInput.value = '';
+}
+
+function filterBatchPrintList() {
+    var query = document.getElementById('batchPrintSearchInput').value.toLowerCase().trim();
+    var rows = document.querySelectorAll('#batchStudentList tbody tr');
+    rows.forEach(function(row) {
+        var text = row.textContent.toLowerCase();
+        row.style.display = (!query || text.indexOf(query) !== -1) ? '' : 'none';
+    });
 }
 
 function batchSelectAll() {
@@ -6904,7 +6923,7 @@ async function loadEditNamesUI() {
             const name = student["STUDENT'S NAME"] || '';
             const sex = student["Sex"] || '-';
             html += `<tr style="background:${index % 2 === 0 ? '#fff' : '#f9f9f9'};">
-                <td style="border:1px solid #ddd;padding:5px 8px;text-align:center;font-weight:bold;">${examNo}</td>
+                <td style="border:1px solid #ddd;padding:5px 8px;text-align:center;"><input type="text" data-examno-edit="${examNo}" data-idx="${index}" value="${examNo.replace(/"/g, '&quot;')}" style="width:100%;padding:4px;border:1px solid #ccc;border-radius:4px;font-size:inherit;box-sizing:border-box;text-align:center;font-weight:bold;" /></td>
                 <td style="border:1px solid #ddd;padding:5px 8px;text-align:center;"><select data-examno-sex="${examNo}" style="width:100%;padding:4px;border:1px solid #ccc;border-radius:4px;font-size:inherit;box-sizing:border-box;text-align:center;"><option value="M"${sex==='M'?' selected':''}>M</option><option value="F"${sex==='F'?' selected':''}>F</option></select></td>
                 <td style="border:1px solid #ddd;padding:4px;"><input type="text" data-examno="${examNo}" value="${name.replace(/"/g, '&quot;')}" style="width:100%;padding:4px 6px;border:1px solid #ccc;border-radius:4px;font-size:inherit;box-sizing:border-box;" /></td>
             </tr>`;
@@ -6926,9 +6945,25 @@ async function saveEditedNames() {
     if (!token) { alert('Authorization Code required.'); return; }
     if (!form) { alert('Please select a class.'); return; }
 
-    const inputs = document.querySelectorAll('#editNamesContainer input[data-examno]');
+    const examNoInputs = document.querySelectorAll('#editNamesContainer input[data-examno-edit]');
+    const nameInputs = document.querySelectorAll('#editNamesContainer input[data-examno]');
     const sexSelects = document.querySelectorAll('#editNamesContainer select[data-examno-sex]');
-    if (inputs.length === 0) { alert('No students to update.'); return; }
+    if (examNoInputs.length === 0) { alert('No students to update.'); return; }
+
+    // Check for duplicate exam numbers
+    const examNoValues = [];
+    let hasDuplicates = false;
+    examNoInputs.forEach(input => {
+        const val = input.value.trim().toUpperCase();
+        if (val && examNoValues.indexOf(val) !== -1) {
+            hasDuplicates = true;
+        }
+        examNoValues.push(val);
+    });
+    if (hasDuplicates) {
+        alert('Duplicate Exam Numbers detected. Please ensure each student has a unique Exam Number.');
+        return;
+    }
 
     showLoading();
     updateLoadingPercent(10);
@@ -6937,17 +6972,33 @@ async function saveEditedNames() {
         const classData = await fetchClassData(form);
         updateLoadingPercent(40);
 
-        let changesCount = 0;
+        let examNoChangesCount = 0;
+        let nameChangesCount = 0;
         let sexChangesCount = 0;
-        inputs.forEach(input => {
-            const examNo = input.getAttribute('data-examno');
+
+        // Process exam number changes first
+        examNoInputs.forEach(input => {
+            const originalExamNo = input.getAttribute('data-examno-edit');
+            const newExamNo = input.value.trim().toUpperCase();
+            if (!newExamNo) return;
+
+            const student = classData.find(s => s["Exam Number"] === originalExamNo);
+            if (student && student["Exam Number"] !== newExamNo) {
+                student["Exam Number"] = newExamNo;
+                examNoChangesCount++;
+            }
+        });
+
+        // Process name changes (use original exam no from data-examno-edit since we need current state)
+        nameInputs.forEach(input => {
+            const originalExamNo = input.getAttribute('data-examno');
             const newName = input.value.trim();
             if (!newName) return;
 
-            const student = classData.find(s => s["Exam Number"] === examNo);
+            const student = classData.find(s => s["Exam Number"] === originalExamNo);
             if (student && student["STUDENT'S NAME"] !== newName) {
                 student["STUDENT'S NAME"] = newName;
-                changesCount++;
+                nameChangesCount++;
             }
         });
 
@@ -6961,16 +7012,16 @@ async function saveEditedNames() {
             }
         });
 
-        if (changesCount === 0 && sexChangesCount === 0) {
+        if (examNoChangesCount === 0 && nameChangesCount === 0 && sexChangesCount === 0) {
             hideLoading();
-            alert('No name or sex changes detected.');
+            alert('No changes detected.');
             return;
         }
 
         currentClassData[form] = classData;
         updateLoadingPercent(60);
 
-        const totalChanges = changesCount + sexChangesCount;
+        const totalChanges = examNoChangesCount + nameChangesCount + sexChangesCount;
         const commitMessage = `Edited ${totalChanges} student record(s) in ${form}`;
 
         const fileName = `${form}.csv`;
@@ -6986,7 +7037,8 @@ async function saveEditedNames() {
         if (result) {
             currentDataSha[form] = result.content.sha;
             let summaryParts = [];
-            if (changesCount > 0) summaryParts.push(`${changesCount} name(s)`);
+            if (examNoChangesCount > 0) summaryParts.push(`${examNoChangesCount} exam no(s)`);
+            if (nameChangesCount > 0) summaryParts.push(`${nameChangesCount} name(s)`);
             if (sexChangesCount > 0) summaryParts.push(`${sexChangesCount} sex entry/entries`);
             alert(`${summaryParts.join(' and ')} updated successfully in ${form.toUpperCase()}!`);
             loadEditNamesUI();
@@ -6994,7 +7046,7 @@ async function saveEditedNames() {
     } catch (error) {
         hideLoading();
         console.error('Save edited names failed:', error);
-        alert(`Failed to save name changes: ${safeMsg(error)}`);
+        alert(`Failed to save changes: ${safeMsg(error)}`);
     }
 }
 </script>
