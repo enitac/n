@@ -5012,8 +5012,13 @@ async function displayGradesSheet() {
         student.__numericPosition = numericPosition;
     });
 
-    // Default sort by position before caching and rendering
-    studentsWithMetrics.sort((a, b) => a.student.__numericPosition - b.student.__numericPosition);
+    // Default sort by pass/fail before caching and rendering
+    studentsWithMetrics.sort((a, b) => {
+        const aPass = a.metrics.overallRemark === 'Pass';
+        const bPass = b.metrics.overallRemark === 'Pass';
+        if (aPass !== bPass) return aPass ? -1 : 1;
+        return a.metrics.overallMetric - b.metrics.overallMetric;
+    });
 
     // Cache for toggle re-use
     _gradeSheetData = { form, isUpperForm, studentsWithMetrics };
@@ -5021,8 +5026,8 @@ async function displayGradesSheet() {
     // Render table
     renderGradeSheetTable(form, isUpperForm, studentsWithMetrics);
     document.getElementById('gradeSortToggleBtn').style.display = '';
-    document.getElementById('gradeSortToggleBtn').textContent = 'Sort: Pass \u2192 Fail';
-    document.getElementById('gradeSortToggleBtn').style.background = '#e67e22';
+    document.getElementById('gradeSortToggleBtn').textContent = 'Sort: By Position';
+    document.getElementById('gradeSortToggleBtn').style.background = '#2980b9';
 }
 
 function _buildGradeRowHtml(form, { student, metrics }) {
@@ -5085,23 +5090,22 @@ function toggleGradeSort() {
     const isPassFail = btn.textContent.includes('Pass');
 
     if (isPassFail) {
-        // Sort: passed students first (best performance), then failed (worst performance last)
+        // Sort by position
+        const sorted = [..._gradeSheetData.studentsWithMetrics].sort((a, b) => a.student.__numericPosition - b.student.__numericPosition);
+        renderGradeSheetTable(_gradeSheetData.form, _gradeSheetData.isUpperForm, sorted);
+        btn.textContent = 'Sort: Pass \u2192 Fail';
+        btn.style.background = '#e67e22';
+    } else {
+        // Back to default pass/fail order
         const sorted = [..._gradeSheetData.studentsWithMetrics].sort((a, b) => {
             const aPass = a.metrics.overallRemark === 'Pass';
             const bPass = b.metrics.overallRemark === 'Pass';
             if (aPass !== bPass) return aPass ? -1 : 1;
-            // Within same pass/fail group: sort by performance (best first)
             return a.metrics.overallMetric - b.metrics.overallMetric;
         });
         renderGradeSheetTable(_gradeSheetData.form, _gradeSheetData.isUpperForm, sorted);
         btn.textContent = 'Sort: By Position';
         btn.style.background = '#2980b9';
-    } else {
-        // Back to default position order
-        const sorted = [..._gradeSheetData.studentsWithMetrics].sort((a, b) => a.student.__numericPosition - b.student.__numericPosition);
-        renderGradeSheetTable(_gradeSheetData.form, _gradeSheetData.isUpperForm, sorted);
-        btn.textContent = 'Sort: Pass \u2192 Fail';
-        btn.style.background = '#e67e22';
     }
 }
 
