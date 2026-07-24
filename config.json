@@ -69,7 +69,6 @@
       "Chichewa": "L. Chinamale/S. Kachulu",
       "Computer Studies": "-N. Chimalizeni",
       "English": "J. Zebron",
-      "French": "R. Kadzimbuka",
       "Geography": "T. Chimtenga",
       "History": "A. Ndisale",
       "Home Economics": "T. Lungu",
@@ -85,7 +84,6 @@
       "Chichewa": "M. Dzekedzeke/ L. Dickson",
       "Computer Studies": "-",
       "English": "O. Banda/P. Nthukwa",
-      "French": "-",
       "Geography": "G. Chigwe",
       "History": "Y. Kanyangala",
       "Home Economics": "-",
@@ -101,7 +99,6 @@
       "Chichewa": "R. Kadzimbuka/L. Chinamale",
       "Computer Studies": "-",
       "English": "J. Zebron/ L. Kamisa",
-      "French": "-",
       "Geography": "J. Mphindo",
       "History": "T. Chimtenga",
       "Home Economics": "-",
@@ -117,7 +114,6 @@
       "Chichewa": "L. Dickson/M. Dzekedzeke",
       "Computer Studies": "-",
       "English": "O. Banda/L. Kamisa",
-      "French": "-",
       "Geography": "J. Mphindo",
       "History": "A. Ndisale",
       "Home Economics": "-",
@@ -260,5 +256,10 @@
   },
   "passwordEnabled": false,
   "sneColumnVisible": false,
-  "setupPassword": "1972"
+  "sexColumnVisible": false,
+  "setupPassword": "1972",
+  "studentPasswords": {},
+  "stampImage": "",
+  "stampDate": "",
+  "stampEnabled": true
 }
