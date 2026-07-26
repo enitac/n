@@ -2,7 +2,7 @@
   "term": "3",
   "year": "2026",
   "generalComment": "",
-  "nextTermOpens": "14th September,2026",
+  "nextTermOpens": "14th September, 2026",
   "fees": "K200,000.00",
   "gradeKeyLower": {
     "A": 80,
@@ -69,6 +69,7 @@
       "Chichewa": "L. Chinamale/S. Kachulu",
       "Computer Studies": "-N. Chimalizeni",
       "English": "J. Zebron",
+      "French": "-",
       "Geography": "T. Chimtenga",
       "History": "A. Ndisale",
       "Home Economics": "T. Lungu",
@@ -84,6 +85,7 @@
       "Chichewa": "M. Dzekedzeke/ L. Dickson",
       "Computer Studies": "-",
       "English": "O. Banda/P. Nthukwa",
+      "French": "-",
       "Geography": "G. Chigwe",
       "History": "Y. Kanyangala",
       "Home Economics": "-",
@@ -99,6 +101,7 @@
       "Chichewa": "R. Kadzimbuka/L. Chinamale",
       "Computer Studies": "-",
       "English": "J. Zebron/ L. Kamisa",
+      "French": "-",
       "Geography": "J. Mphindo",
       "History": "T. Chimtenga",
       "Home Economics": "-",
@@ -114,6 +117,7 @@
       "Chichewa": "L. Dickson/M. Dzekedzeke",
       "Computer Studies": "-",
       "English": "O. Banda/L. Kamisa",
+      "French": "-",
       "Geography": "J. Mphindo",
       "History": "A. Ndisale",
       "Home Economics": "-",
@@ -256,10 +260,5 @@
   },
   "passwordEnabled": false,
   "sneColumnVisible": false,
-  "sexColumnVisible": false,
-  "setupPassword": "1972",
-  "studentPasswords": {},
-  "stampImage": "",
-  "stampDate": "",
-  "stampEnabled": true
+  "setupPassword": "1972"
 }
