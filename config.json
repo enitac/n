@@ -128,7 +128,7 @@
   },
   "hiddenSubjects": {
     "form1": {
-      "Agriculture": true,
+      "Agriculture": false,
       "Bible Knowledge": true,
       "Biology": false,
       "Chemistry": false,
