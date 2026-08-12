@@ -1,7 +1,7 @@
 STUDENT'S NAME,Exam Number,Sex,Date of Birth,SN,Agriculture,Bible Knowledge,Biology,Chemistry,Chichewa,Computer Studies,English,French,Geography,History,Home Economics,Mathematics,Physics,Social/Life
-AKIM ESTHER,ME001,F,01/01/2011,,,30,15,,,,,,30,62,,07,,
-"ANOLD MOREEN ",ME002,F,02/01/2011,,,,18,,,,,,51,27,,01,,
-BANDA ROSE DOMINGO,ME003,F,03/01/2011,,,36,24,,,,,,41,79,,22,,
+AKIM ESTHER,ME001,F,01/01/2011,,,30,15,,,,30,,30,62,,07,,
+"ANOLD MOREEN ",ME002,F,02/01/2011,,,,18,,,,40,,51,27,,01,,
+BANDA ROSE DOMINGO,ME003,F,03/01/2011,,,36,24,,,,41,,41,79,,22,,
 "BEYADI FAITH ",ME004,F,04/01/2011,SN,,36,56,53,,,,,,,,14,49,
 "CHAMBWINJA JESSY ",ME005,F,05/01/2011,,,68,72,69,,,,,,,,33,70,
 CHAVULA LINDA,ME006,F,06/01/2011,,,,26,39,,,,,,,,05,25,
