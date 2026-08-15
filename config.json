@@ -244,18 +244,18 @@
     "form3": {
       "Agriculture": false,
       "Bible Knowledge": false,
-      "Biology": false,
-      "Chemistry": false,
+      "Biology": true,
+      "Chemistry": true,
       "Chichewa": false,
-      "Computer Studies": false,
+      "Computer Studies": true,
       "English": false,
       "French": false,
       "Geography": false,
       "History": false,
       "Home Economics": false,
-      "Mathematics": false,
-      "Physics": false,
-      "Social/Life": false
+      "Mathematics": true,
+      "Physics": true,
+      "Social/Life": true
     }
   },
   "passwordEnabled": false,
