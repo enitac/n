@@ -255,7 +255,7 @@
       "Home Economics": false,
       "Mathematics": true,
       "Physics": true,
-      "Social/Life": true
+      "Social/Life": false
     }
   },
   "passwordEnabled": false,
