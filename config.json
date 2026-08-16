@@ -242,20 +242,20 @@
       "Social/Life": false
     },
     "form3": {
-      "Agriculture": false,
-      "Bible Knowledge": false,
+      "Agriculture": true,
+      "Bible Knowledge": true,
       "Biology": true,
       "Chemistry": true,
-      "Chichewa": false,
+      "Chichewa": true,
       "Computer Studies": true,
-      "English": false,
-      "French": false,
-      "Geography": false,
-      "History": false,
-      "Home Economics": false,
+      "English": true,
+      "French": true,
+      "Geography": true,
+      "History": true,
+      "Home Economics": true,
       "Mathematics": true,
       "Physics": true,
-      "Social/Life": false
+      "Social/Life": true
     }
   },
   "passwordEnabled": true,
