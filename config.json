@@ -258,7 +258,7 @@
       "Social/Life": true
     }
   },
-  "passwordEnabled": false,
+  "passwordEnabled": true,
   "sneColumnVisible": false,
   "setupPassword": "1972"
 }
