@@ -194,20 +194,20 @@
   },
   "locks": {
     "form1": {
-      "Agriculture": true,
-      "Bible Knowledge": true,
-      "Chemistry": true,
-      "Biology": true,
+      "Agriculture": false,
+      "Bible Knowledge": false,
+      "Chemistry": false,
+      "Biology": false,
       "Chichewa": false,
-      "Computer Studies": true,
+      "Computer Studies": false,
       "English": false,
       "French": false,
-      "Geography": true,
-      "Home Economics": true,
-      "History": true,
-      "Mathematics": true,
-      "Physics": true,
-      "Social/Life": true
+      "Geography": false,
+      "Home Economics": false,
+      "History": false,
+      "Mathematics": false,
+      "Physics": false,
+      "Social/Life": false
     },
     "form4": {
       "Agriculture": true,
